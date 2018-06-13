@@ -77,50 +77,53 @@ type psSorted []psTemplateParams
 func (a psSorted) Len() int      { return len(a) }
 func (a psSorted) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
-type imagesSortedTime struct{ imagesSorted }
+type psSortedTime struct{ psSorted }
 
-func (a psSortedTime) Less(i, j int) bool { return a[i].CreatedAtTime.After(a[j].CreatedAtTime) }
+func (a psSortedTime) Less(i, j int) bool {
+	return a.psSorted[i].CreatedAtTime.After(a.psSorted[j].CreatedAtTime)
+}
 
-type imagesSortedID struct{ imagesSorted }
+type psSortedId struct{ psSorted }
 
-func (a psSortedID) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedId) Less(i, j int) bool { return a.psSorted[i].ID < a.psSorted[j].ID }
 
-type imagesSortedImage struct{ imagesSorted }
+type psSortedImage struct{ psSorted }
 
-func (a psSortedImage) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedImage) Less(i, j int) bool { return a.psSorted[i].Image < a.psSorted[j].Image }
 
-type imagesSortedCommand struct{ imagesSorted }
+type psSortedCommand struct{ psSorted }
 
-func (a psSortedCommand) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedCommand) Less(i, j int) bool { return a.psSorted[i].Command < a.psSorted[j].Command }
 
-type imagesSortedRunningFor struct{ imagesSorted }
+type psSortedRunningFor struct{ psSorted }
 
-func (a psSortedRunningFor) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedRunningFor) Less(i, j int) bool {
+	return a.psSorted[i].RunningFor < a.psSorted[j].RunningFor
+}
 
-type imagesSortedStatus struct{ imagesSorted }
+type psSortedStatus struct{ psSorted }
 
-func (a psSortedStatus) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedStatus) Less(i, j int) bool { return a.psSorted[i].Status < a.psSorted[j].Status }
 
-type imagesSortedPorts struct{ imagesSorted }
+type psSortedPorts struct{ psSorted }
 
-func (a psSortedPorts) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedPorts) Less(i, j int) bool { return a.psSorted[i].Ports < a.psSorted[j].Ports }
 
-type imagesSortedSize struct{ imagesSorted }
+type psSortedSize struct{ psSorted }
 
-func (a psSortedSize) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedSize) Less(i, j int) bool { return a.psSorted[i].Size < a.psSorted[j].Size }
 
-type imagesSortedNames struct{ imagesSorted }
+type psSortedNames struct{ psSorted }
 
-func (a psSortedNames) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedNames) Less(i, j int) bool { return a.psSorted[i].Names < a.psSorted[j].Names }
 
-type imagesSortedLabels struct{ imagesSorted }
+type psSortedLabels struct{ psSorted }
 
-func (a psSortedLabels) Less(i, j int) bool { return a[i] < a[j] }
+func (a psSortedLabels) Less(i, j int) bool { return a.psSorted[i].Labels < a.psSorted[j].Labels }
 
-type imagesSortedMounts struct{ imagesSorted }
+type psSortedMounts struct{ psSorted }
 
-func (a psSortedMounts) Less(i, j int) bool { return a[i] < a[j] }
-
+func (a psSortedMounts) Less(i, j int) bool { return a.psSorted[i].Mounts < a.psSorted[j].Mounts }
 
 var (
 	psFlags = []cli.Flag{
@@ -146,6 +149,10 @@ var (
 			Usage: "Show the latest container created (all states)",
 		},
 		cli.BoolFlag{
+			Name:  "namespace, ns",
+			Usage: "Display namespace information",
+		},
+		cli.BoolFlag{
 			Name:  "no-trunc",
 			Usage: "Display the extended information",
 		},
@@ -157,9 +164,10 @@ var (
 			Name:  "size, s",
 			Usage: "Display the total file sizes",
 		},
-		cli.BoolFlag{
-			Name:  "namespace, ns",
-			Usage: "Display namespace information",
+		cli.StringFlag{
+			Name:  "sort",
+			Usage: "Sort output by id, image, command, time, runningfor, status, ports, size, names, labels, or mounts",
+			Value: "time",
 		},
 	}
 	psDescription = "Prints out information about the containers"
@@ -206,6 +214,7 @@ func psCmd(c *cli.Context) error {
 		Quiet:     c.Bool("quiet"),
 		Size:      c.Bool("size"),
 		Namespace: c.Bool("namespace"),
+		Sort:      c.String("sort"),
 	}
 
 	var filterFuncs []libpod.ContainerFilter
@@ -424,6 +433,35 @@ func (p *psTemplateParams) headerMap() map[string]string {
 	return values
 }
 
+func sortPsOutput(sortBy string, psOutput psSorted) psSorted {
+	switch sortBy {
+	case "id":
+		sort.Sort(psSortedId{psOutput})
+	case "image":
+		sort.Sort(psSortedImage{psOutput})
+	case "command":
+		sort.Sort(psSortedCommand{psOutput})
+	case "runningfor":
+		sort.Sort(psSortedRunningFor{psOutput})
+	case "status":
+		sort.Sort(psSortedStatus{psOutput})
+	case "ports":
+		sort.Sort(psSortedPorts{psOutput})
+	case "size":
+		sort.Sort(psSortedSize{psOutput})
+	case "names":
+		sort.Sort(psSortedNames{psOutput})
+	case "labels":
+		sort.Sort(psSortedLabels{psOutput})
+	case "mounts":
+		sort.Sort(psSortedMounts{psOutput})
+	default:
+		sort.Sort(psSortedTime{psOutput})
+	}
+	fmt.Println("printing by", sortBy)
+	return psOutput
+}
+
 // getTemplateOutput returns the modified container information
 func getTemplateOutput(containers []*libpod.Container, opts batchcontainer.PsOptions) (psSorted, error) {
 	var (
@@ -525,8 +563,8 @@ func getTemplateOutput(containers []*libpod.Container, opts batchcontainer.PsOpt
 		}
 		psOutput = append(psOutput, params)
 	}
-	// Sort the ps entries by created time
-	sort.Sort(psSorted(psOutput))
+	// Sort the ps entries
+	sortPsOutput(opts.Sort, psOutput)
 
 	return psOutput, nil
 }

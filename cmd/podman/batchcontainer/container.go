@@ -29,6 +29,7 @@ type PsOptions struct {
 	Size      bool
 	Label     string
 	Namespace bool
+	Sort      string
 }
 
 // BatchContainerStruct is the return obkect from BatchContainer and contains
