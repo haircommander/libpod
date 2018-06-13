@@ -458,7 +458,6 @@ func sortPsOutput(sortBy string, psOutput psSorted) psSorted {
 	default:
 		sort.Sort(psSortedTime{psOutput})
 	}
-	fmt.Println("printing by", sortBy)
 	return psOutput
 }
 
