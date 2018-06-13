@@ -111,7 +111,11 @@ func (a psSortedPorts) Less(i, j int) bool { return a.psSorted[i].Ports < a.psSo
 
 type psSortedSize struct{ psSorted }
 
-func (a psSortedSize) Less(i, j int) bool { return a.psSorted[i].Size < a.psSorted[j].Size }
+func (a psSortedSize) Less(i, j int) bool {
+    //size1, _ := units.FromHumanSize(a.psSorted[i].Size)
+    //size2, _ := units.FromHumanSize(a.psSorted[j].Size)
+    return a.psSorted[i].Size < a.psSorted[j].Size
+}
 
 type psSortedNames struct{ psSorted }
 
