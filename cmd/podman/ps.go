@@ -74,9 +74,53 @@ type psJSONParams struct {
 // Type declaration and functions for sorting the PS output by time
 type psSorted []psTemplateParams
 
-func (a psSorted) Len() int           { return len(a) }
-func (a psSorted) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a psSorted) Less(i, j int) bool { return a[i].CreatedAtTime.After(a[j].CreatedAtTime) }
+func (a psSorted) Len() int      { return len(a) }
+func (a psSorted) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+type imagesSortedTime struct{ imagesSorted }
+
+func (a psSortedTime) Less(i, j int) bool { return a[i].CreatedAtTime.After(a[j].CreatedAtTime) }
+
+type imagesSortedID struct{ imagesSorted }
+
+func (a psSortedID) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedImage struct{ imagesSorted }
+
+func (a psSortedImage) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedCommand struct{ imagesSorted }
+
+func (a psSortedCommand) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedRunningFor struct{ imagesSorted }
+
+func (a psSortedRunningFor) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedStatus struct{ imagesSorted }
+
+func (a psSortedStatus) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedPorts struct{ imagesSorted }
+
+func (a psSortedPorts) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedSize struct{ imagesSorted }
+
+func (a psSortedSize) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedNames struct{ imagesSorted }
+
+func (a psSortedNames) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedLabels struct{ imagesSorted }
+
+func (a psSortedLabels) Less(i, j int) bool { return a[i] < a[j] }
+
+type imagesSortedMounts struct{ imagesSorted }
+
+func (a psSortedMounts) Less(i, j int) bool { return a[i] < a[j] }
+
 
 var (
 	psFlags = []cli.Flag{
