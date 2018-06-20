@@ -3,6 +3,7 @@ package integration
 import (
 	"os"
     "strings"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -21,17 +22,15 @@ var _ = Describe("Podman overlayfs", func() {
 		podmanTest.Cleanup()
 	})
     It("test", func() {
+        os.Setenv("STORAGE_OPTIONS", "--storage-opt overlay.size=1000 --storage-driver overlay")
 		tempdir, err = CreateTempDirInTempDir()
 		if err != nil {
 			os.Exit(1)
 		}
 		podmanTest = PodmanCreate(tempdir)
 		podmanTest.RestoreAllArtifacts()
-        setup := podmanTest.SystemExec("dd", []string{"if=/dev/zero", "of=" + tempdir + "/virtfs", "bs=1024", "count=30720"})
-        setup.WaitWithDefaultTimeout()
-		Expect(setup.ExitCode()).To(Equal(0))
 
-        setup = podmanTest.SystemExec("losetup", []string{})
+        setup := podmanTest.SystemExec("dd", []string{"if=/dev/zero", "of=" + tempdir + "/virtfs", "bs=1024", "count=30720"})
         setup.WaitWithDefaultTimeout()
 		Expect(setup.ExitCode()).To(Equal(0))
 
@@ -49,17 +48,24 @@ var _ = Describe("Podman overlayfs", func() {
         setup.WaitWithDefaultTimeout()
 		Expect(setup.ExitCode()).To(Equal(0))
 
-        tempDir, _ := CreateTempDirInTempDir()
 
-        setup = podmanTest.SystemExec("mount", []string{"-t", "xfs", device, tempDir})
+        setup = podmanTest.SystemExec("mount", []string{"-t", "xfs", "-o", "prjquota", device, tempdir})
         setup.WaitWithDefaultTimeout()
 		Expect(setup.ExitCode()).To(Equal(0))
 
-        cleanup := podmanTest.SystemExec("umount", []string{tempDir})
+
+		session := podmanTest.Podman([]string{"run", "--rm", ALPINE, "ls"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Not(Equal(0)))
+        grep, _ := session.ErrorGrepString("disk quota exceeded")
+        Expect(grep).To(BeTrue())
+
+
+        cleanup := podmanTest.SystemExec("umount", []string{tempdir})
         cleanup.WaitWithDefaultTimeout()
         Expect(cleanup.ExitCode()).To(Equal(0))
 
-        cleanup = podmanTest.SystemExec("rm", []string{"-r", tempDir})
+        cleanup = podmanTest.SystemExec("rm", []string{"-r", tempdir})
         cleanup.WaitWithDefaultTimeout()
         Expect(cleanup.ExitCode()).To(Equal(0))
 
