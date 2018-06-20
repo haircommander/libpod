@@ -2,7 +2,7 @@ package integration
 
 import (
 	"os"
-
+    "strings"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -15,31 +15,72 @@ var _ = Describe("Podman overlayfs", func() {
 	)
 
 	BeforeEach(func() {
+	})
+
+	AfterEach(func() {
+		podmanTest.Cleanup()
+	})
+    It("test", func() {
 		tempdir, err = CreateTempDirInTempDir()
 		if err != nil {
 			os.Exit(1)
 		}
 		podmanTest = PodmanCreate(tempdir)
 		podmanTest.RestoreAllArtifacts()
-	})
+        setup := podmanTest.SystemExec("dd", []string{"if=/dev/zero", "of=" + tempdir + "/virtfs", "bs=1024", "count=30720"})
+        setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
 
-	AfterEach(func() {
-		podmanTest.Cleanup()
-	})
+        setup = podmanTest.SystemExec("losetup", []string{})
+        setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
 
-	It("podman file too large for fs", func() {
-		session := podmanTest.SystemExec("podman", []string{"--storage-opt", "overlay.size=1000", "run", "-d", ALPINE, "ls"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Not(Equal(0)))
-        grep, _ := session.ErrorGrepString("disk quota exceeded")
-        Expect(grep).To(BeTrue())
-	})
+        setup = podmanTest.SystemExec("losetup", []string{"-f"})
+        setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
+        device := strings.Replace(setup.OutputToString(), " ", "", -1)
 
-	It("podman file is correct size", func() {
-		session := podmanTest.SystemExec("podman", []string{"--storage-opt", "overlay.size=5MB", "run", "-d", ALPINE, "ls"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-	})
+        setup = podmanTest.SystemExec("losetup", []string{device, tempdir + "/virtfs"})
+        setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
+
+
+        setup = podmanTest.SystemExec("mkfs.xfs", []string{device})
+        setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
+
+        tempDir, _ := CreateTempDirInTempDir()
+
+        setup = podmanTest.SystemExec("mount", []string{"-t", "xfs", device, tempDir})
+        setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
+
+        cleanup := podmanTest.SystemExec("umount", []string{tempDir})
+        cleanup.WaitWithDefaultTimeout()
+        Expect(cleanup.ExitCode()).To(Equal(0))
+
+        cleanup = podmanTest.SystemExec("rm", []string{"-r", tempDir})
+        cleanup.WaitWithDefaultTimeout()
+        Expect(cleanup.ExitCode()).To(Equal(0))
+
+        cleanup = podmanTest.SystemExec("losetup", []string{"-d", device})
+        cleanup.WaitWithDefaultTimeout()
+        Expect(cleanup.ExitCode()).To(Equal(0))
+    })
+
+//	It("podman file too large for fs", func() {
+//		session := podmanTest.SystemExec("podman", []string{"--storage-opt", "overlay.size=1000", "run", "-d", ALPINE, "ls"})
+//		session.WaitWithDefaultTimeout()
+//		Expect(session.ExitCode()).To(Not(Equal(0)))
+//        grep, _ := session.ErrorGrepString("disk quota exceeded")
+//        Expect(grep).To(BeTrue())
+//	})
+//
+//	It("podman file is correct size", func() {
+//		session := podmanTest.SystemExec("podman", []string{"--storage-opt", "overlay.size=5MB", "run", "-d", ALPINE, "ls"})
+//		session.WaitWithDefaultTimeout()
+//		Expect(session.ExitCode()).To(Equal(0))
+//	})
 //	It("podman run a container based on local image with short options", func() {
 //		session := podmanTest.Podman([]string{"run", "-dt", ALPINE, "ls"})
 //		session.WaitWithDefaultTimeout()
