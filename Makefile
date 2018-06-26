@@ -1,5 +1,5 @@
 GO ?= go
-EPOCH_TEST_COMMIT ?= 9e134576e8eb047466706fa71a201def6d5d8159
+EPOCH_TEST_COMMIT ?= 55dd266ec1396038992db76283931e8bce04f1b3
 HEAD ?= HEAD
 CHANGELOG_BASE ?= HEAD~
 CHANGELOG_TARGET ?= HEAD
@@ -17,7 +17,12 @@ ETCDIR ?= ${DESTDIR}/etc
 ETCDIR_LIBPOD ?= ${ETCDIR}/crio
 TMPFILESDIR ?= ${PREFIX}/lib/tmpfiles.d
 SYSTEMDDIR ?= ${PREFIX}/lib/systemd/system
-BUILDTAGS ?= seccomp $(shell hack/btrfs_tag.sh) $(shell hack/libdm_tag.sh) $(shell hack/btrfs_installed_tag.sh) $(shell hack/ostree_tag.sh) $(shell hack/selinux_tag.sh)
+BUILDTAGS ?= seccomp $(shell hack/btrfs_tag.sh) $(shell hack/libdm_tag.sh) $(shell hack/btrfs_installed_tag.sh) $(shell hack/ostree_tag.sh) $(shell hack/selinux_tag.sh) varlink
+
+ifneq (,$(findstring varlink,$(BUILDTAGS)))
+	PODMAN_VARLINK_DEPENDENCIES = cmd/podman/varlink/ioprojectatomicpodman.go
+endif
+
 PYTHON ?= /usr/bin/python3
 HAS_PYTHON3 := $(shell command -v python3 2>/dev/null)
 
@@ -92,7 +97,7 @@ test/copyimg/copyimg: .gopathok $(wildcard test/copyimg/*.go)
 test/checkseccomp/checkseccomp: .gopathok $(wildcard test/checkseccomp/*.go)
 	$(GO) build -ldflags '$(LDFLAGS)' -tags "$(BUILDTAGS) containers_image_ostree_stub" -o $@ $(PROJECT)/test/checkseccomp
 
-podman: .gopathok API.md cmd/podman/varlink/ioprojectatomicpodman.go
+podman: .gopathok $(PODMAN_VARLINK_DEPENDENCIES)
 	$(GO) build -i -ldflags '$(LDFLAGS_PODMAN)' -tags "$(BUILDTAGS)" -o bin/$@ $(PROJECT)/cmd/podman
 
 python-podman:
@@ -192,6 +197,7 @@ install.man: docs
 	install ${SELINUXOPT} -d -m 755 $(MANDIR)/man5
 	install ${SELINUXOPT} -m 644 $(filter %.1,$(MANPAGES)) -t $(MANDIR)/man1
 	install ${SELINUXOPT} -m 644 $(filter %.5,$(MANPAGES)) -t $(MANDIR)/man5
+	install ${SELINUXOPT} -m 644 docs/links/*1 -t $(MANDIR)/man1
 
 install.config:
 	install ${SELINUXOPT} -D -m 644 libpod.conf ${SHAREDIR_CONTAINERS}/libpod.conf
