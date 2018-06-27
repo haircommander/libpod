@@ -377,12 +377,63 @@ func (p *PodmanTest) CreateArtifact(image string) error {
 
 	return copy.Image(getTestContext(), policyContext, exportRef, importRef, options)
 }
+// RestoreArtifact puts the cached image into our test store
+func (p *PodmanTest) RestoreArtifactXFS(image string) error {
+	storeOptions := sstorage.DefaultStoreOptions
+	storeOptions.GraphDriverName = "overlay"
+	storeOptions.GraphRoot = p.CrioRoot
+	storeOptions.RunRoot = p.RunRoot
+	storeOptions.GraphDriverOptions = append(storeOptions.GraphDriverOptions, strings.Split(p.StorageOptions, " ")...)
+	store, err := sstorage.GetStore(storeOptions)
+	if err != nil {
+		return errors.Errorf("error opening storage: %v", err)
+	}
+	defer func() {
+		_, _ = store.Shutdown(false)
+	}()
+
+	storage.Transport.SetStore(store)
+
+	ref, err := storage.Transport.ParseStoreReference(store, image)
+	if err != nil {
+		return errors.Errorf("error parsing image name: %v", err)
+	}
+
+	imageDir := strings.Replace(image, "/", "_", -1)
+	importFrom := fmt.Sprintf("dir:%s", filepath.Join(p.ArtifactPath, imageDir))
+	importRef, err := alltransports.ParseImageName(importFrom)
+	if err != nil {
+		return errors.Errorf("error parsing image name %v: %v", image, err)
+	}
+
+	systemContext := types.SystemContext{
+		SignaturePolicyPath: p.SignaturePolicyPath,
+	}
+	policy, err := signature.DefaultPolicy(&systemContext)
+	if err != nil {
+		return errors.Errorf("error loading signature policy: %v", err)
+	}
+
+	policyContext, err := signature.NewPolicyContext(policy)
+	if err != nil {
+		return errors.Errorf("error loading signature policy: %v", err)
+	}
+	defer func() {
+		_ = policyContext.Destroy()
+	}()
+
+	options := &copy.Options{}
+	err = copy.Image(getTestContext(), policyContext, ref, importRef, options)
+	if err != nil {
+		return errors.Errorf("error importing %s: %v", importFrom, err)
+	}
+	return nil
+}
 
 // RestoreArtifact puts the cached image into our test store
 func (p *PodmanTest) RestoreArtifact(image string) error {
 	storeOptions := sstorage.DefaultStoreOptions
 	storeOptions.GraphDriverName = "vfs"
-	//storeOptions.GraphDriverOptions = storageOptions
 	storeOptions.GraphRoot = p.CrioRoot
 	storeOptions.RunRoot = p.RunRoot
 	store, err := sstorage.GetStore(storeOptions)
@@ -433,6 +484,19 @@ func (p *PodmanTest) RestoreArtifact(image string) error {
 
 // RestoreAllArtifacts unpacks all cached images
 func (p *PodmanTest) RestoreAllArtifacts() error {
+	if os.Getenv("NO_TEST_CACHE") != "" {
+		return nil
+	}
+	for _, image := range RESTORE_IMAGES {
+		if err := p.RestoreArtifact(image); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RestoreAllArtifacts unpacks all cached images
+func (p *PodmanTest) RestoreAllArtifactsXFS() error {
 	if os.Getenv("NO_TEST_CACHE") != "" {
 		return nil
 	}

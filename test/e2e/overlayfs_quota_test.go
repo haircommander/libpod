@@ -14,48 +14,40 @@ var _ = Describe("Podman overlayfs", func() {
 		tempdir    string
 		err        error
 		podmanTest PodmanTest
-		podmanTest1 PodmanTest
         device     string
 	)
 
 	BeforeEach(func() {
-		supertempdir, _ := CreateTempDirInTempDir()
-
-		podmanTest1 = PodmanCreate(supertempdir)
-		podmanTest1.RestoreAllArtifacts()
-
-        os.Setenv("STORAGE_OPTIONS", "--storage-opt overlay.size=200000 --storage-driver overlay")
+        os.Setenv("STORAGE_OPTIONS", "--storage-opt overlay.size=1.004608M --storage-driver overlay")
 		tempdir, err = CreateTempDirInTempDir()
 		if err != nil {
 			os.Exit(1)
 		}
 
+		podmanTest = PodmanCreate(tempdir)
 
-        setup := podmanTest1.SystemExec("dd", []string{"if=/dev/zero", "of=" + supertempdir + "/virtfs", "bs=1024", "count=30720"})
+        setup := podmanTest.SystemExec("dd", []string{"if=/dev/zero", "of=" + tempdir + "/virtfs", "bs=1024", "count=30720"})
         setup.WaitWithDefaultTimeout()
 		Expect(setup.ExitCode()).To(Equal(0))
 
-        setup = podmanTest1.SystemExec("losetup", []string{"-f"})
+        setup = podmanTest.SystemExec("losetup", []string{"-f"})
         setup.WaitWithDefaultTimeout()
 		Expect(setup.ExitCode()).To(Equal(0))
         device = strings.Replace(setup.OutputToString(), " ", "", -1)
 
-        setup = podmanTest1.SystemExec("losetup", []string{device, supertempdir + "/virtfs"})
+        setup = podmanTest.SystemExec("losetup", []string{device, tempdir + "/virtfs"})
         setup.WaitWithDefaultTimeout()
 		Expect(setup.ExitCode()).To(Equal(0))
 
-
-        setup = podmanTest1.SystemExec("mkfs.xfs", []string{device})
+        setup = podmanTest.SystemExec("mkfs.xfs", []string{device})
         setup.WaitWithDefaultTimeout()
 		Expect(setup.ExitCode()).To(Equal(0))
 
-
-        setup = podmanTest1.SystemExec("mount", []string{"-t", "xfs", "-o", "prjquota", device, tempdir})
+        setup = podmanTest.SystemExec("mount", []string{"-t", "xfs", "-o", "prjquota", device, tempdir})
         setup.WaitWithDefaultTimeout()
 		Expect(setup.ExitCode()).To(Equal(0))
 
-		podmanTest = PodmanCreate(tempdir)
-		podmanTest.RestoreAllArtifacts()
+		podmanTest.RestoreAllArtifactsXFS()
 	})
 
 	AfterEach(func() {
@@ -71,28 +63,39 @@ var _ = Describe("Podman overlayfs", func() {
         cleanup.WaitWithDefaultTimeout()
         Expect(cleanup.ExitCode()).To(Equal(0))
 
-
-
         if err := os.RemoveAll(podmanTest.TempDir); err != nil {
             fmt.Printf("%q\n", err)
         }
-        podmanTest1.Cleanup()
         os.Setenv("STORAGE_OPTIONS", "")
 	})
 
     It("test", func() {
-		session := podmanTest.Podman([]string{"--log-level=debug", "run", "--name", "test2", "-d", ALPINE, "ls"})
+        session := podmanTest.Podman([]string{"run", "--security-opt", "label=disable", ALPINE,  "sh", "-c", "dd if=/dev/zero of=file.txt count=1048576 bs=1"})
 		session.WaitWithDefaultTimeout()
 		Expect(session.ExitCode()).To(Equal(0))
-
-		session = podmanTest.Podman([]string{"run", "--name", "test", "-d", ALPINE, "sleep", "5m"})
-		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(0))
-
-        session = podmanTest.Podman([]string{"exec", "test", "/bin/bash", "-c", "'dd if=/dev/zero of=/tmp/file2.txt count=1024 bs=30720'"})
-		Expect(session.ExitCode()).To(Not(Equal(0)))
-        grep, _ := session.ErrorGrepString("disk quota exceeded")
-        Expect(grep).To(BeTrue())
     })
 
+
+    It("test2", func() {
+        session := podmanTest.Podman([]string{"run",  "--security-opt",  "label=disable", ALPINE,  "sh", "-c", "dd if=/dev/zero of=file.txt count=1048577 bs=1"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Not(Equal(0)))
+        grep, _ := session.ErrorGrepString("No space left on device")
+		Expect(grep).To(BeTrue())
+    })
+
+    It("test3", func() {
+        session := podmanTest.Podman([]string{"run", "--security-opt", "label=disable", "busybox",  "sh", "-c", "dd if=/dev/zero of=file.txt count=1048576 bs=1"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+    })
+
+
+    It("test4", func() {
+        session := podmanTest.Podman([]string{"run",  "--security-opt",  "label=disable", "busybox",  "sh", "-c", "dd if=/dev/zero of=file.txt count=1048577 bs=1"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Not(Equal(0)))
+        grep, _ := session.ErrorGrepString("No space left on device")
+		Expect(grep).To(BeTrue())
+    })
 })
