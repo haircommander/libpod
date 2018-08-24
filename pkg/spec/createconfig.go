@@ -418,6 +418,8 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 	}
 	if IsPod(string(c.IpcMode)) {
 		options = append(options, libpod.WithIPCNSFromPod(pod))
+	} else {
+		options = append(options, libpod.WithShmDir(c.ShmDir))
 	}
 
 	if IsPod(string(c.UtsMode)) {
@@ -453,7 +455,6 @@ func (c *CreateConfig) GetContainerCreateOptions(runtime *libpod.Runtime) ([]lib
 	options = append(options, libpod.WithConmonPidFile(c.ConmonPidFile))
 	options = append(options, libpod.WithLabels(c.Labels))
 	options = append(options, libpod.WithUser(c.User))
-	options = append(options, libpod.WithShmDir(c.ShmDir))
 	options = append(options, libpod.WithShmSize(c.Resources.ShmSize))
 	options = append(options, libpod.WithGroups(c.GroupAdd))
 	options = append(options, libpod.WithIDMappings(*c.IDMappings))

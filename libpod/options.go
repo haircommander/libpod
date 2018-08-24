@@ -561,12 +561,16 @@ func WithIPCNSFromPod(p *Pod) CtrCreateOption {
 			return err
 		}
 
-		infraContainer, err := p.InfraContainerID()
+		infraContainerID, err := p.InfraContainerID()
 		if err != nil {
 			return err
 		}
-		ctr.config.IPCNsCtr = infraContainer
-
+		infraContainer, err := p.runtime.state.Container(infraContainerID)
+		if err != nil {
+			return err
+		}
+		ctr.config.IPCNsCtr = infraContainerID
+		ctr.config.ShmDir = infraContainer.config.ShmDir
 		return nil
 	}
 }
