@@ -20,6 +20,8 @@ const (
 	JSONString = "json"
 	// IDString const to save on duplicates for Go templates
 	IDString = "{{.ID}}"
+    // TreeString const is the format for images printed in tree format
+    TreeString = "tree"
 )
 
 // Writer interface for outputs

@@ -660,6 +660,10 @@ func (i *Image) Layer() (*storage.Layer, error) {
 	return i.imageruntime.store.Layer(i.image.TopLayer)
 }
 
+func (i *Image) Layers() ([]storage.Layer, error) {
+    return i.imageruntime.store.Layers()
+}
+
 // History contains the history information of an image
 type History struct {
 	ID        string     `json:"id"`

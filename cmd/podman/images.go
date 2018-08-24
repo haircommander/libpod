@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+    "fmt"
+    "github.com/disiqueira/gotree"
 
 	"github.com/containers/libpod/cmd/podman/formats"
 	"github.com/containers/libpod/cmd/podman/libpodruntime"
@@ -116,6 +118,10 @@ var (
 			Name:  "sort",
 			Usage: "Sort by created, id, repository, size, or tag",
 			Value: "created",
+		},
+		cli.BoolFlag{
+			Name:  "tree",
+			Usage: "Display image layers",
 		},
 	}
 
@@ -323,6 +329,32 @@ func getImagesJSONOutput(ctx context.Context, runtime *libpod.Runtime, images []
 	return
 }
 
+func getImagesTreeOutput(ctx context.Context, runtime *libpod.Runtime, images []*image.Image) (string, error) {
+    imagesOutput := gotree.New("")
+    for _, img := range images {
+		size, err := img.Size(ctx)
+		if err != nil {
+			size = nil
+		}
+        humanSize := units.HumanSizeWithPrecision(float64(*size), 3)
+        imageTree := imagesOutput.Add(fmt.Sprintf("%s Size: %s", shortID(img.ID()), humanSize))
+        history, err := img.History(ctx)
+        if err != nil {
+            return "", err
+        }
+        for _, hist := range history {
+            fmt.Printf("%v\n", hist)
+            humanSize = units.HumanSizeWithPrecision(float64(hist.Size), 3)
+            imageTree.Add(fmt.Sprintf("%s Size: %s Comment: %s", shortID(hist.ID), humanSize, hist.Comment))
+        }
+        //for _, layer := range layers {
+        //    humanSize = units.HumanSizeWithPrecision(float64(layer.UncompressedSize), 3)
+        //    fmt.Println(layer.Metadata, strings.Join(layer.Names, ","))
+        //}
+    }
+    return imagesOutput.Print(), nil
+}
+
 // generateImagesOutput generates the images based on the format provided
 
 func generateImagesOutput(ctx context.Context, runtime *libpod.Runtime, images []*image.Image, opts imagesOptions) error {
@@ -335,6 +367,13 @@ func generateImagesOutput(ctx context.Context, runtime *libpod.Runtime, images [
 	case formats.JSONString:
 		imagesOutput := getImagesJSONOutput(ctx, runtime, images)
 		out = formats.JSONStructArray{Output: imagesToGeneric([]imagesTemplateParams{}, imagesOutput)}
+    case formats.TreeString:
+        imagesOutput, err := getImagesTreeOutput(ctx, runtime, images)
+        if err != nil {
+            return err
+        }
+        fmt.Println(imagesOutput)
+        return nil
 	default:
 		imagesOutput := getImagesTemplateOutput(ctx, runtime, images, opts)
 		out = formats.StdoutTemplateArray{Output: imagesToGeneric(imagesOutput, []imagesJSONParams{}), Template: opts.outputformat, Fields: imagesOutput[0].HeaderMap()}
