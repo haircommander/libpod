@@ -11,6 +11,7 @@ import (
 	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/pkg/adapter/shortcuts"
+	cc "github.com/containers/libpod/pkg/spec"
 )
 
 // Pod ...
@@ -204,19 +205,25 @@ func (r *LocalRuntime) CreatePod(ctx context.Context, cli *cliconfig.PodCreateVa
 		options = append(options, nsOptions...)
 	}
 
-	if len(cli.Publish) > 0 {
-		portBindings, err := shared.CreatePortBindings(cli.Publish)
-		if err != nil {
-			return "", err
-		}
-		options = append(options, libpod.WithInfraContainerPorts(portBindings))
-
-	}
 	// always have containers use pod cgroups
 	// User Opt out is not yet supported
 	options = append(options, libpod.WithPodCgroups())
 
-	pod, err := r.NewPod(ctx, options...)
+	// TODO FIXME
+	createconfig, err := shared.ParseInfraCreateOpts(ctx, cli, r.Runtime)
+	if err != nil {
+		return "", errors.Wrapf(err, "error getting infra create config")
+	}
+	infraOpts, err := createconfig.GetContainerCreateOptions(r.Runtime, nil)
+	if err != nil {
+		return "", errors.Wrapf(err, "error translating create config to opts")
+	}
+
+	infraSpec, err := cc.CreateConfigToOCISpec(createconfig)
+	if err != nil {
+		return "", errors.Wrapf(err, "error translating create config into spec")
+	}
+	pod, err := r.NewPod(ctx, infraSpec, infraOpts, options...)
 	if err != nil {
 		return "", err
 	}

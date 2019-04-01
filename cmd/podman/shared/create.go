@@ -405,13 +405,13 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 			// pod does not exist; lets make it
 			var podOptions []libpod.PodCreateOption
 			podOptions = append(podOptions, libpod.WithPodName(podName), libpod.WithInfraContainer(), libpod.WithPodCgroups())
-			if len(portBindings) > 0 {
-				ociPortBindings, err := cc.NatToOCIPortBindings(portBindings)
-				if err != nil {
-					return nil, err
-				}
-				podOptions = append(podOptions, libpod.WithInfraContainerPorts(ociPortBindings))
-			}
+			//if len(portBindings) > 0 {
+			//	ociPortBindings, err := cc.NatToOCIPortBindings(portBindings)
+			//	if err != nil {
+			//		return nil, err
+			//	}
+			//	podOptions = append(podOptions, libpod.WithInfraContainerPorts(ociPortBindings))
+			//}
 
 			podNsOptions, err := GetNamespaceOptions(strings.Split(DefaultKernelNamespaces, ","))
 			if err != nil {
@@ -419,7 +419,8 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 			}
 			podOptions = append(podOptions, podNsOptions...)
 			// make pod
-			pod, err := runtime.NewPod(ctx, podOptions...)
+			// TODO FIXME BIGGGG MUST FIX BEFORE PUSHING FIGURE OUT HOW TO DO THIS
+			pod, err := runtime.NewPod(ctx, nil, []libpod.CtrCreateOption{}, podOptions...)
 			if err != nil {
 				return nil, err
 			}

@@ -12,11 +12,14 @@ import (
 	"github.com/containers/libpod/cmd/podman/shared"
 	"github.com/containers/libpod/cmd/podman/varlink"
 	"github.com/containers/libpod/libpod"
+	cc "github.com/containers/libpod/pkg/spec"
 )
 
 // CreatePod ...
 func (i *LibpodAPI) CreatePod(call iopodman.VarlinkCall, create iopodman.PodCreate) error {
 	var options []libpod.PodCreateOption
+	var infraOptions []libpod.CtrCreateOption
+
 	if create.CgroupParent != "" {
 		options = append(options, libpod.WithPodCgroupParent(create.CgroupParent))
 	}
@@ -40,11 +43,17 @@ func (i *LibpodAPI) CreatePod(call iopodman.VarlinkCall, create iopodman.PodCrea
 		if rootless.IsRootless() {
 			return call.ReplyErrorOccurred("rootless networking does not allow port binding to the host")
 		}
-		portBindings, err := shared.CreatePortBindings(create.Publish)
+		// BIG TODO FIXME
+		portBindings, err := cc.ExposedPorts([]string{}, create.Publish, false, make(map[string]struct{}))
 		if err != nil {
 			return err
 		}
-		options = append(options, libpod.WithInfraContainerPorts(portBindings))
+		ociPb, err := cc.NatToOCIPortBindings(portBindings)
+		if err != nil {
+			return err
+		}
+		// BIG TODO FIXME
+		infraOptions = append(infraOptions, libpod.WithNetNS(ociPb, false, "", []string{}))
 
 	}
 	if create.Infra {
@@ -57,7 +66,8 @@ func (i *LibpodAPI) CreatePod(call iopodman.VarlinkCall, create iopodman.PodCrea
 	}
 	options = append(options, libpod.WithPodCgroups())
 
-	pod, err := i.Runtime.NewPod(getContext(), options...)
+	// BIG TODO FIXME
+	pod, err := i.Runtime.NewPod(getContext(), nil, infraOptions, options...)
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}

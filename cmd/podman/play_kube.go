@@ -113,11 +113,16 @@ func playKubeYAMLCmd(c *cliconfig.KubePlayValues) error {
 		return err
 	}
 	podOptions = append(podOptions, nsOptions...)
+	var infraOptions []libpod.CtrCreateOption
 	podPorts := getPodPorts(podYAML.Spec.Containers)
-	podOptions = append(podOptions, libpod.WithInfraContainerPorts(podPorts))
+	if len(podPorts) > 0 {
+		// BIG TODO FIXME
+		infraOptions = append(infraOptions, libpod.WithNetNS(podPorts, false, "", []string{}))
+	}
 
 	// Create the Pod
-	pod, err := runtime.NewPod(ctx, podOptions...)
+	// TODO FIXME
+	pod, err := runtime.NewPod(ctx, nil, infraOptions, podOptions...)
 	if err != nil {
 		return err
 	}

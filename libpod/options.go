@@ -1566,16 +1566,17 @@ func WithInfraContainer() PodCreateOption {
 	}
 }
 
-// WithInfraContainerPorts tells the pod to add port bindings to the pause container
-func WithInfraContainerPorts(bindings []ocicni.PortMapping) PodCreateOption {
-	return func(pod *Pod) error {
-		if pod.valid {
-			return ErrPodFinalized
-		}
-		pod.config.InfraContainer.PortBindings = bindings
-		return nil
-	}
-}
+// TODO FIXME remove
+//// WithInfraContainerPorts tells the pod to add port bindings to the pause container
+//func WithInfraContainerPorts(bindings []ocicni.PortMapping) PodCreateOption {
+//	return func(pod *Pod) error {
+//		if pod.valid {
+//			return ErrPodFinalized
+//		}
+//		pod.config.InfraContainer.PortBindings = bindings
+//		return nil
+//	}
+//}
 
 // WithHealthCheck adds the healthcheck to the container config
 func WithHealthCheck(healthCheck *manifest.Schema2HealthConfig) CtrCreateOption {

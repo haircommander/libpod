@@ -11,12 +11,13 @@ import (
 
 	"github.com/containerd/cgroups"
 	"github.com/containers/libpod/libpod/events"
+	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 // NewPod makes a new, empty pod
-func (r *Runtime) NewPod(ctx context.Context, options ...PodCreateOption) (*Pod, error) {
+func (r *Runtime) NewPod(ctx context.Context, infraSpec *spec.Spec, infraOptions []CtrCreateOption, options ...PodCreateOption) (*Pod, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -108,7 +109,7 @@ func (r *Runtime) NewPod(ctx context.Context, options ...PodCreateOption) (*Pod,
 	}
 
 	if pod.HasInfraContainer() {
-		ctr, err := r.createInfraContainer(ctx, pod)
+		ctr, err := r.createInfraContainer(ctx, pod, infraSpec, infraOptions)
 		if err != nil {
 			// Tear down pod, as it is assumed a the pod will contain
 			// a pause container, and it does not.
