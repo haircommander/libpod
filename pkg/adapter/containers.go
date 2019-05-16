@@ -884,7 +884,7 @@ func (r *LocalRuntime) execPS(c *libpod.Container, args []string) ([]string, err
 	}()
 
 	cmd := append([]string{"ps"}, args...)
-	if err := c.Exec(false, false, []string{}, cmd, "", "", streams, 0); err != nil {
+	if _, err := c.Exec(false, false, []string{}, cmd, "", "", streams, 0); err != nil {
 		return nil, err
 	}
 

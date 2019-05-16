@@ -110,7 +110,7 @@ func (c *Container) runHealthCheck() (HealthCheckStatus, error) {
 	logrus.Debugf("executing health check command %s for %s", strings.Join(newCommand, " "), c.ID())
 	timeStart := time.Now()
 	hcResult := HealthCheckSuccess
-	hcErr := c.Exec(false, false, []string{}, newCommand, "", "", streams, 0)
+	_, hcErr := c.Exec(false, false, []string{}, newCommand, "", "", streams, 0)
 	if hcErr != nil {
 		hcResult = HealthCheckFailure
 		returnCode = 1

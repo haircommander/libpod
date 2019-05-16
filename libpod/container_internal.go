@@ -30,7 +30,9 @@ import (
 
 const (
 	// name of the directory holding the artifacts
-	artifactsDir = "artifacts"
+	artifactsDir       = "artifacts"
+	execDirPermission  = 0775
+	execFilePermission = 0644
 )
 
 // rootFsSize gets the size of the container's root filesystem
@@ -131,15 +133,74 @@ func (c *Container) AttachSocketPath() string {
 	return filepath.Join(c.runtime.ociRuntime.socketsDir, c.ID(), "attach")
 }
 
-// Get PID file path for a container's exec session
-func (c *Container) execPidPath(sessionID string) string {
-	return filepath.Join(c.state.RunDir, "exec_pid_"+sessionID)
-}
-
 // exitFilePath gets the path to the container's exit file
 func (c *Container) exitFilePath() string {
 	return filepath.Join(c.runtime.ociRuntime.exitsDir, c.ID())
 }
+
+// create a bundle path and associated files for an exec session
+func (c *Container) createExecBundle(sessionID string) (err error) {
+	bundlePath := c.execBundlePath(sessionID)
+	if err = os.MkdirAll(bundlePath, execDirPermission); err != nil {
+		return
+	}
+	defer func() {
+		if err != nil {
+			err2 := os.Remove(bundlePath)
+			if err2 != nil {
+				logrus.Warnf("error removing exec bundle after another error: %v", err2)
+			}
+		}
+	}()
+	var f *os.File
+	f, err = os.OpenFile(c.execLogPath(sessionID), os.O_RDONLY|os.O_CREATE, execFilePermission)
+	if err != nil {
+		err = errors.Wrapf(err, "Error creating file for container %s exec session %s", c.ID(), sessionID)
+		return
+	}
+	if err2 := f.Close(); err2 != nil {
+		logrus.Warnf("Error in closing newly created log path file: %v", err2)
+	}
+	if err2 := os.MkdirAll(c.execExitFilePath(sessionID), execDirPermission); err2 != nil {
+		// The directory is allowed to exist
+		if !os.IsExist(err2) {
+			err = errors.Wrapf(err2, "error creating OCI runtime exit file path %s", c.execExitFilePath(sessionID))
+		}
+	}
+	return
+}
+
+// cleanup an exec session after its done
+func (c *Container) cleanupExecBundle(sessionID string) error {
+	return os.RemoveAll(c.execBundlePath(sessionID))
+}
+
+// the path to a containers exec session bundle
+func (c *Container) execBundlePath(sessionID string) string {
+	return filepath.Join(c.bundlePath(), sessionID)
+}
+
+// Get PID file path for a container's exec session
+func (c *Container) execPidPath(sessionID string) string {
+	return filepath.Join(c.execBundlePath(sessionID), "exec_pid")
+}
+
+// the log path for an exec session
+func (c *Container) execLogPath(sessionID string) string {
+	return filepath.Join(c.execBundlePath(sessionID), "exec_log")
+}
+
+// the socket conmon creates for an exec session
+func (c *Container) execAttachSocketPath(sessionID string) string {
+	return filepath.Join(c.runtime.ociRuntime.socketsDir, sessionID, "attach")
+}
+
+// execExitFilePath gets the path to the container's exit file
+func (c *Container) execExitFilePath(sessionID string) string {
+	return filepath.Join(c.execBundlePath(sessionID), "exit")
+}
+
+// TODO FIXME that should be exitfile Dir
 
 // Wait for the container's exit file to appear.
 // When it does, update our state based on it.
@@ -875,7 +936,7 @@ func (c *Container) init(ctx context.Context, retainRetries bool) error {
 	}
 
 	// With the spec complete, do an OCI create
-	if err := c.runtime.ociRuntime.createContainer(c, c.config.CgroupParent, nil); err != nil {
+	if err := c.runtime.ociRuntime.createContainer(c, nil); err != nil {
 		return err
 	}
 

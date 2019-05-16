@@ -125,5 +125,6 @@ func execCmd(c *cliconfig.ExecValues) error {
 	streams.AttachError = true
 	streams.AttachInput = true
 
-	return ctr.Exec(c.Tty, c.Privileged, envs, cmd, c.User, c.Workdir, streams, c.PreserveFDs)
+	exitCode, err = ctr.Exec(c.Tty, c.Privileged, envs, cmd, c.User, c.Workdir, streams, c.PreserveFDs)
+	return err
 }

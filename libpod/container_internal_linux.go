@@ -652,7 +652,7 @@ func (c *Container) restore(ctx context.Context, options ContainerCheckpointOpti
 	// Cleanup for a working restore.
 	c.removeConmonFiles()
 
-	if err := c.runtime.ociRuntime.createContainer(c, c.config.CgroupParent, &options); err != nil {
+	if err := c.runtime.ociRuntime.createContainer(c, &options); err != nil {
 		return err
 	}
 

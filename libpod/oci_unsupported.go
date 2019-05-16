@@ -7,15 +7,11 @@ import (
 	"os/exec"
 )
 
-func (r *OCIRuntime) moveConmonToCgroup(ctr *Container, cgroupParent string, cmd *exec.Cmd) error {
-	return ErrOSNotSupported
-}
-
 func newPipe() (parent *os.File, child *os.File, err error) {
 	return nil, nil, ErrNotImplemented
 }
 
-func (r *OCIRuntime) createContainer(ctr *Container, cgroupParent string, restoreOptions *ContainerCheckpointOptions) (err error) {
+func (r *OCIRuntime) createContainer(ctr *Container, restoreOptions *ContainerCheckpointOptions) (err error) {
 	return ErrNotImplemented
 }
 
@@ -37,4 +33,8 @@ func (r *OCIRuntime) execStopContainer(ctr *Container, timeout uint) error {
 
 func (r *OCIRuntime) stopContainer(ctr *Container, timeout uint) error {
 	return ErrOSNotSupported
+}
+
+func readConmonPipeData(pipe *os.File) (int, error) {
+	return -1, ErrOSNotSupported
 }
