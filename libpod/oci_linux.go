@@ -270,10 +270,9 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 	if tty {
 		args = append(args, "-t")
 	}
-	// TODO FIXME figure this out
-	//if streams.AttachInput {
-	//	args = append(args, "-i")
-	//}
+	if streams.AttachInput {
+		args = append(args, "-i")
+	}
 
 	// Append container ID and command
 	args = append(args, "-e")

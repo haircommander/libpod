@@ -42,7 +42,7 @@ func init() {
 	flags := execCommand.Flags()
 	flags.SetInterspersed(false)
 	flags.StringArrayVarP(&execCommand.Env, "env", "e", []string{}, "Set environment variables")
-	flags.BoolVarP(&execCommand.Interfactive, "interactive", "i", false, "Not supported.  All exec commands are interactive by default")
+	flags.BoolVarP(&execCommand.Interactive, "interactive", "i", false, "Keep STDIN open even if not attached")
 	flags.BoolVarP(&execCommand.Latest, "latest", "l", false, "Act on the latest container podman is aware of")
 	flags.BoolVar(&execCommand.Privileged, "privileged", false, "Give the process extended Linux capabilities inside the container.  The default is false")
 	flags.BoolVarP(&execCommand.Tty, "tty", "t", false, "Allocate a pseudo-TTY. The default is false")
@@ -120,10 +120,12 @@ func execCmd(c *cliconfig.ExecValues) error {
 	streams := new(libpod.AttachStreams)
 	streams.OutputStream = os.Stdout
 	streams.ErrorStream = os.Stderr
-	streams.InputStream = os.Stdin
+	if c.Interactive {
+		streams.InputStream = os.Stdin
+		streams.AttachInput = true
+	}
 	streams.AttachOutput = true
 	streams.AttachError = true
-	streams.AttachInput = true
 
 	exitCode, err = ctr.Exec(c.Tty, c.Privileged, envs, cmd, c.User, c.Workdir, streams, c.PreserveFDs)
 	return err

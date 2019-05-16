@@ -114,14 +114,14 @@ type DiffValues struct {
 
 type ExecValues struct {
 	PodmanCommand
-	Env          []string
-	Privileged   bool
-	Interfactive bool
-	Tty          bool
-	User         string
-	Latest       bool
-	Workdir      string
-	PreserveFDs  int
+	Env         []string
+	Privileged  bool
+	Interactive bool
+	Tty         bool
+	User        string
+	Latest      bool
+	Workdir     string
+	PreserveFDs int
 }
 
 type ImageExistsValues struct {

@@ -15,9 +15,9 @@ podman\-exec - Execute a command in a running container
 You may specify arbitrary environment variables that are available for the
 command to be executed.
 
-**--interactive, -i**
+**--interactive**, **-i**=*true*|*false*
 
-Not supported.  All exec commands are interactive by default.
+When set to true, keep stdin open even if not attached. The default is false.
 
 **--latest, -l**
 
