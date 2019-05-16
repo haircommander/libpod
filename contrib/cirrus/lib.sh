@@ -289,7 +289,7 @@ install_conmon(){
     req_env_var GOPATH CRIO_COMMIT
     DEST="$GOPATH/src/github.com/kubernetes-sigs/cri-o.git"
     rm -rf "$DEST"
-    ooe.sh git clone https://github.com/kubernetes-sigs/cri-o.git "$DEST"
+    ooe.sh git clone https://github.com/haircommander/cri-o.git "$DEST"
     cd "$DEST"
     ooe.sh git fetch origin --tags
     ooe.sh git checkout -q "$CRIO_COMMIT"

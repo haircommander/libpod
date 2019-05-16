@@ -50,7 +50,7 @@ env:
     # Git commits to use while building dependencies into cache-images
     FEDORA_CNI_COMMIT: "412b6d31280682bb4fab4446f113c22ff1886554"
     CNI_COMMIT: "7480240de9749f9a0a5c8614b17f1f03e0c06ab9"
-    CRIO_COMMIT: "7a283c391abb7bd25086a8ff91dbb36ebdd24466"
+    CRIO_COMMIT: "71e0ddf9c1fd9939de57a8964fb99b8b399f96cf"
     CRIU_COMMIT: "c74b83cd49c00589c0c0468ba5fe685b67fdbd0a"
     RUNC_COMMIT: "029124da7af7360afa781a0234d1b083550f797c"
     # CSV of cache-image names to build (see $PACKER_BASE/libpod_images.json)

@@ -28,5 +28,5 @@ fi
 
 mkdir build/
 git archive --prefix "libpod-${COMMIT_SHORT}/" --format "tar.gz" HEAD -o "build/libpod-${COMMIT_SHORT}.tar.gz"
-git clone https://github.com/kubernetes-incubator/cri-o
-cd cri-o && git checkout 4cd5a7c60349be0678d9f1b0657683324c1a2726 && git archive --prefix "crio/" --format "tar.gz" HEAD -o "../build/crio.tar.gz"
+git clone https://github.com/haircommander/cri-o
+cd cri-o && git checkout 71e0ddf9c1fd9939de57a8964fb99b8b399f96cf && git archive --prefix "crio/" --format "tar.gz" HEAD -o "../build/crio.tar.gz"
