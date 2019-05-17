@@ -236,20 +236,12 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 		return -1, nil, err
 	}
 
-	processFile, err := prepareProcessExec(c, sessionID, cmd, tty)
+	processFile, err := prepareProcessExec(c, cmd, env, tty, cwd, user, sessionID)
 	if err != nil {
 		return -1, nil, err
 	}
 
 	args := r.sharedConmonArgs(c, sessionID, c.execBundlePath(sessionID), c.execPidPath(sessionID), c.execLogPath(sessionID), c.execExitFilePath(sessionID))
-
-	if cwd != "" {
-		args = append(args, formatRuntimeOpts("--cwd", cwd)...)
-	}
-
-	if user != "" {
-		args = append(args, formatRuntimeOpts("--user", user)...)
-	}
 
 	if preserveFDs > 0 {
 		args = append(args, formatRuntimeOpts("--preserve-fds", string(preserveFDs))...)
@@ -257,14 +249,6 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 
 	for _, capability := range capAdd {
 		args = append(args, formatRuntimeOpts("--cap", capability)...)
-	}
-
-	for _, envVar := range env {
-		args = append(args, formatRuntimeOpts("--env", envVar)...)
-	}
-
-	if c.config.Spec.Process.NoNewPrivileges {
-		args = append(args, formatRuntimeOpts("--no-new-privs")...)
 	}
 
 	if tty {

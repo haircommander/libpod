@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/containerd/cgroups"
+	"github.com/containers/libpod/pkg/lookup"
 	"github.com/containers/libpod/pkg/util"
 	"github.com/containers/libpod/utils"
 	"github.com/coreos/go-systemd/activation"
@@ -164,7 +165,7 @@ func (r *OCIRuntime) createOCIContainer(ctr *Container, restoreOptions *Containe
 
 // prepareProcessExec returns the path of the process.json used in runc exec -p
 // caller is responsible to close the returned *os.File if needed.
-func prepareProcessExec(c *Container, sessionID string, cmd []string, tty bool) (*os.File, error) {
+func prepareProcessExec(c *Container, cmd, env []string, tty bool, cwd, user, sessionID string) (*os.File, error) {
 	f, err := ioutil.TempFile(c.execBundlePath(sessionID), "exec-process-")
 	if err != nil {
 		return nil, err
@@ -178,6 +179,34 @@ func prepareProcessExec(c *Container, sessionID string, cmd []string, tty bool) 
 	if tty {
 		pspec.Terminal = true
 	}
+	if len(env) > 0 {
+		pspec.Env = append(pspec.Env, env...)
+	}
+
+	if cwd != "" {
+		pspec.Cwd = cwd
+
+	}
+	// If user was set, look it up in the container to get a UID to use on
+	// the host
+	if user != "" {
+		execUser, err := lookup.GetUserGroupInfo(c.state.Mountpoint, user, nil)
+		if err != nil {
+			return nil, err
+		}
+		sgids := make([]uint32, 0, len(execUser.Sgids))
+		for _, sgid := range execUser.Sgids {
+			sgids = append(sgids, uint32(sgid))
+		}
+		processUser := spec.User{
+			UID:            uint32(execUser.Uid),
+			GID:            uint32(execUser.Gid),
+			AdditionalGids: sgids,
+		}
+
+		pspec.User = processUser
+	}
+
 	processJSON, err := json.Marshal(pspec)
 	if err != nil {
 		return nil, err

@@ -2,7 +2,6 @@ package libpod
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"github.com/containers/libpod/libpod/driver"
 	"github.com/containers/libpod/libpod/events"
 	"github.com/containers/libpod/pkg/inspect"
-	"github.com/containers/libpod/pkg/lookup"
 	"github.com/containers/storage/pkg/stringid"
 	"github.com/docker/docker/oci/caps"
 	"github.com/opentracing/opentracing-go"
@@ -242,19 +240,6 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user, workDir 
 		capList = caps.GetAllCapabilities()
 	}
 
-	// If user was set, look it up in the container to get a UID to use on
-	// the host
-	hostUser := ""
-	if user != "" {
-		execUser, err := lookup.GetUserGroupInfo(c.state.Mountpoint, user, nil)
-		if err != nil {
-			return defaultExitCode, err
-		}
-
-		// runc expects user formatted as uid:gid
-		hostUser = fmt.Sprintf("%d:%d", execUser.Uid, execUser.Gid)
-	}
-
 	// Generate exec session ID
 	// Ensure we don't conflict with an existing session ID
 	sessionID := stringid.GenerateNonCryptoID()
@@ -277,7 +262,7 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user, workDir 
 	if err := c.createExecBundle(sessionID); err != nil {
 		return defaultExitCode, err
 	}
-	pid, attachChan, err := c.runtime.ociRuntime.execContainer(c, cmd, capList, env, tty, workDir, hostUser, sessionID, streams, preserveFDs)
+	pid, attachChan, err := c.runtime.ociRuntime.execContainer(c, cmd, capList, env, tty, workDir, user, sessionID, streams, preserveFDs)
 	if err != nil {
 		return defaultExitCode, errors.Wrapf(err, "error exec'ing in %s", c.ID())
 	}
