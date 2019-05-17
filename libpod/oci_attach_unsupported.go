@@ -3,6 +3,7 @@
 package libpod
 
 import (
+	"os"
 	"sync"
 
 	"k8s.io/client-go/tools/remotecommand"

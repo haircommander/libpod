@@ -4,7 +4,6 @@ package libpod
 
 import (
 	"os"
-	"os/exec"
 )
 
 func newPipe() (parent *os.File, child *os.File, err error) {
@@ -37,4 +36,8 @@ func (r *OCIRuntime) stopContainer(ctr *Container, timeout uint) error {
 
 func readConmonPipeData(pipe *os.File) (int, error) {
 	return -1, ErrOSNotSupported
+}
+
+func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty bool, cwd, user, sessionID string, streams *AttachStreams, preserveFDs int) (int, chan attachInfo, error) {
+	return -1, nil, ErrOSNotSupported
 }
