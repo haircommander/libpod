@@ -264,7 +264,11 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user, workDir 
 	}
 	pid, attachChan, err := c.runtime.ociRuntime.execContainer(c, cmd, capList, env, tty, workDir, user, sessionID, streams, preserveFDs)
 	if err != nil {
-		return defaultExitCode, errors.Wrapf(err, "error exec'ing in %s", c.ID())
+		ec := defaultExitCode
+		if pid < 0 {
+			ec = -1 * pid
+		}
+		return ec, errors.Wrapf(err, "error exec'ing in %s", c.ID())
 	}
 
 	// We have the PID, add it to state

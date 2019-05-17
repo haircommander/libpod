@@ -174,11 +174,11 @@ func readConmonPipeData(pipe *os.File) (int, error) {
 			return -1, errors.Wrapf(ss.err, "error reading container (probably exited) json message")
 		}
 		logrus.Debugf("Received: %d", ss.si.Data)
-		if ss.si.Data == -1 {
+		if ss.si.Data < 0 {
 			if ss.si.Message != "" {
-				return -1, errors.Wrapf(ErrInternal, "container create failed: %s", ss.si.Message)
+				return ss.si.Data, errors.Wrapf(ErrInternal, "container create failed: %s", ss.si.Message)
 			}
-			return -1, errors.Wrapf(ErrInternal, "container create failed")
+			return ss.si.Data, errors.Wrapf(ErrInternal, "container create failed")
 		}
 		data = ss.si.Data
 	case <-time.After(ContainerCreateTimeout):
@@ -321,35 +321,23 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 	// TODO FIXME if !detach
 	// Attach to the container before starting it
 	attachChan := make(chan attachInfo)
-	errChan := make(chan error)
-	pidChan := make(chan int)
-
-	defer close(errChan)
-	defer close(pidChan)
-
 	go func() {
 		ec, err := c.attachToExec(streams, "", nil, sessionID, parentStartPipe, parentAttachPipe)
 		attachChan <- attachInfo{ExitCode: ec, Error: err}
 	}()
 
+	syncChan := make(chan attachInfo)
+
+	defer close(syncChan)
+
 	go func() {
 		defer parentSyncPipe.Close()
 		pid, err := readConmonPipeData(parentSyncPipe)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		pidChan <- pid
+		syncChan <- attachInfo{ExitCode: pid, Error: err}
 	}()
 
-	var pid int
-	select {
-	case err := <-errChan:
-		return -1, nil, err
-	case pid = <-pidChan:
-		break
-	}
-	return pid, attachChan, nil
+	syncInfo := <-syncChan
+	return syncInfo.ExitCode, attachChan, syncInfo.Error
 }
 
 // Wait for a container which has been sent a signal to stop
