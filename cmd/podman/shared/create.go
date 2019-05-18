@@ -600,6 +600,11 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 
 	memorySwappiness := c.Int64("memory-swappiness")
 
+	logDriver := "k8s-file"
+	if c.Changed("log-driver") {
+		logDriver = c.String("log-driver")
+	}
+
 	config := &cc.CreateConfig{
 		Annotations:       annotations,
 		BuiltinImgVolumes: ImageVolumes,
@@ -632,7 +637,7 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 		IPAddress: c.String("ip"),
 		Labels:    labels,
 		//LinkLocalIP:    c.StringSlice("link-local-ip"), // Not implemented yet
-		LogDriver:    c.String("log-driver"),
+		LogDriver:    logDriver,
 		LogDriverOpt: c.StringSlice("log-opt"),
 		MacAddress:   c.String("mac-address"),
 		Name:         c.String("name"),
