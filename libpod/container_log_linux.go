@@ -4,7 +4,6 @@
 package libpod
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -60,8 +59,7 @@ func (c *Container) readFromJournal(options *LogOptions, logChannel chan *LogLin
 
 	if options.Follow {
 		go func() {
-			bytes := make([]byte, 0)
-			follower := FollowBuffer{bytes, logChannel}
+			follower := FollowBuffer{logChannel}
 			err := r.Follow(nil, follower)
 			if err != nil {
 				logrus.Debugf(err.Error())
@@ -80,9 +78,7 @@ func (c *Container) readFromJournal(options *LogOptions, logChannel chan *LogLin
 		for ec != 0 && err == nil {
 			// because we are reusing bytes, we need to make
 			// sure the old data doesn't get into the new line
-			// Further, since we need to add a newline for Follow
-			// we want to remove that here, hence the -1
-			bytestr := string(bytes[:ec-1])
+			bytestr := string(bytes[:ec])
 			logLine, err2 := newLogLine(bytestr)
 			if err2 != nil {
 				logrus.Error(err2)
@@ -129,30 +125,19 @@ func journalFormatter(entry *journal.JournalEntry) (string, error) {
 		return "", fmt.Errorf("no MESSAGE field present in journal entry")
 	}
 	output += strings.TrimSpace(msg)
-	output += "\n"
 	return output, nil
 }
 
 type FollowBuffer struct {
-	bytes      []byte
 	logChannel chan *LogLine
 }
 
 func (f FollowBuffer) Write(p []byte) (int, error) {
-	f.bytes = append(f.bytes, p...)
-	for {
-		lineEnd := bytes.Index(f.bytes, []byte{'\n'})
-		if lineEnd > 0 {
-			bytestr := string(f.bytes[:lineEnd])
-			f.bytes = f.bytes[lineEnd+1:]
-			logLine, err := newLogLine(bytestr)
-			if err != nil {
-				logrus.Debugf(err.Error())
-				continue
-			}
-			f.logChannel <- logLine
-		} else {
-			return len(p), nil
-		}
+	bytestr := string(p)
+	logLine, err := newLogLine(bytestr)
+	if err != nil {
+		return -1, err
 	}
+	f.logChannel <- logLine
+	return len(p), nil
 }
