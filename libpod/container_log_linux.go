@@ -4,6 +4,7 @@
 package libpod
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -57,6 +58,21 @@ func (c *Container) readFromJournal(options *LogOptions, logChannel chan *LogLin
 		r.Rewind()
 	}
 
+	if options.Follow {
+		go func() {
+			bytes := make([]byte, 0)
+			follower := FollowBuffer{bytes, logChannel}
+			err := r.Follow(nil, follower)
+			if err != nil {
+				logrus.Debugf(err.Error())
+			}
+			r.Close()
+			options.WaitGroup.Done()
+			return
+		}()
+		return nil
+	}
+
 	go func() {
 		bytes := make([]byte, bufLen)
 		// /me complains about no do-while in go
@@ -64,7 +80,9 @@ func (c *Container) readFromJournal(options *LogOptions, logChannel chan *LogLin
 		for ec != 0 && err == nil {
 			// because we are reusing bytes, we need to make
 			// sure the old data doesn't get into the new line
-			bytestr := string(bytes[:ec])
+			// Further, since we need to add a newline for Follow
+			// we want to remove that here, hence the -1
+			bytestr := string(bytes[:ec-1])
 			logLine, err2 := newLogLine(bytestr)
 			if err2 != nil {
 				logrus.Error(err2)
@@ -84,8 +102,8 @@ func (c *Container) readFromJournal(options *LogOptions, logChannel chan *LogLin
 
 func journalFormatter(entry *journal.JournalEntry) (string, error) {
 	usec := entry.RealtimeTimestamp
-	timestamp := time.Unix(0, int64(usec)*int64(time.Microsecond))
-	output := timestamp.Format(logTimeFormat) + " "
+	tsString := time.Unix(0, int64(usec)*int64(time.Microsecond)).Format(logTimeFormat)
+	output := fmt.Sprintf("%s ", tsString)
 	priority, ok := entry.Fields["PRIORITY"]
 	if !ok {
 		return "", errors.Errorf("no PRIORITY field present in journal entry")
@@ -111,5 +129,30 @@ func journalFormatter(entry *journal.JournalEntry) (string, error) {
 		return "", fmt.Errorf("no MESSAGE field present in journal entry")
 	}
 	output += strings.TrimSpace(msg)
+	output += "\n"
 	return output, nil
+}
+
+type FollowBuffer struct {
+	bytes      []byte
+	logChannel chan *LogLine
+}
+
+func (f FollowBuffer) Write(p []byte) (int, error) {
+	f.bytes = append(f.bytes, p...)
+	for {
+		lineEnd := bytes.Index(f.bytes, []byte{'\n'})
+		if lineEnd > 0 {
+			bytestr := string(f.bytes[:lineEnd])
+			f.bytes = f.bytes[lineEnd+1:]
+			logLine, err := newLogLine(bytestr)
+			if err != nil {
+				logrus.Debugf(err.Error())
+				continue
+			}
+			f.logChannel <- logLine
+		} else {
+			return len(p), nil
+		}
+	}
 }
