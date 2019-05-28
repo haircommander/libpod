@@ -212,7 +212,6 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 	if err != nil {
 		return -1, nil, errors.Wrapf(err, "error creating socket pair")
 	}
-	defer parentStartPipe.Close()
 
 	// create the attach pipe to allow attach socket to be created before
 	// $RUNTIME exec starts running. This is to make sure we can capture all output
@@ -221,7 +220,6 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 	if err != nil {
 		return -1, nil, errors.Wrapf(err, "error creating socket pair")
 	}
-	//defer parentAttachPipe.Close()
 
 	childrenClosed := false
 	defer func() {
@@ -255,9 +253,6 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 	if tty {
 		args = append(args, "-t")
 	}
-	//if streams.AttachInput {
-	//	args = append(args, "-i")
-	//}
 
 	// Append container ID and command
 	args = append(args, "-e")
@@ -325,23 +320,13 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 	// TODO FIXME if !detach
 	// Attach to the container before starting it
 	attachChan := make(chan attachInfo)
-	go func() {
-		ec, err := c.attachToExec(streams, detachKeys, resize, sessionID, parentStartPipe, parentAttachPipe)
-		attachChan <- attachInfo{ExitCode: ec, Error: err}
-	}()
+	go c.attachToExec(streams, detachKeys, resize, sessionID, parentStartPipe, parentAttachPipe, parentSyncPipe, attachChan)
 
-	syncChan := make(chan attachInfo)
+	// attachToExec will first send the pid, followed by the exit code
+	// Let's let the caller read the exit code so it can also track the pid however it wants
+	pidInfo := <-attachChan
 
-	defer close(syncChan)
-
-	go func() {
-		defer parentSyncPipe.Close()
-		pid, err := readConmonPipeData(parentSyncPipe)
-		syncChan <- attachInfo{ExitCode: pid, Error: err}
-	}()
-
-	syncInfo := <-syncChan
-	return syncInfo.ExitCode, attachChan, syncInfo.Error
+	return pidInfo.ExitCode, attachChan, pidInfo.Error
 }
 
 // Wait for a container which has been sent a signal to stop

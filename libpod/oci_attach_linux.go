@@ -98,18 +98,26 @@ func (c *Container) attach(streams *AttachStreams, keys string, resize <-chan re
 // 3. child waits on startFd for attachToExec to attach to said console socket
 // 4. attachToExec sends on startFd, signalling it has attached to the socket and child is ready to go
 // 5. child receives on startFd, runs the runtime exec command
+// TODO FIXME that's not right
 // 6. Eventually, parent sends (along attachFd) the exit code to attachToExec, signalling the end of the process
-func (c *Container) attachToExec(streams *AttachStreams, keys string, resize <-chan remotecommand.TerminalSize, sessionID string, startFd *os.File, attachFd *os.File) (int, error) {
+func (c *Container) attachToExec(streams *AttachStreams, keys string, resize <-chan remotecommand.TerminalSize, sessionID string, startFd *os.File, attachFd *os.File, syncFd *os.File, attachChan chan attachInfo) {
+	errorInfo := attachInfo{ExitCode: -1, Error: nil}
 	if !streams.AttachOutput && !streams.AttachError && !streams.AttachInput {
-		return -1, errors.Wrapf(ErrInvalidArg, "must provide at least one stream to attach to")
+		errorInfo.Error = errors.Wrapf(ErrInvalidArg, "must provide at least one stream to attach to")
+		attachChan <- errorInfo
+		return
 	}
 	if startFd == nil || attachFd == nil {
-		return -1, errors.Wrapf(ErrInvalidArg, "start sync pipe and attach sync pipe must be defined for exec attach")
+		errorInfo.Error = errors.Wrapf(ErrInvalidArg, "start sync pipe and attach sync pipe must be defined for exec attach")
+		attachChan <- errorInfo
+		return
 	}
 
 	detachKeys, err := processDetachKeys(keys)
 	if err != nil {
-		return -1, err
+		errorInfo.Error = err
+		attachChan <- errorInfo
+		return
 	}
 
 	logrus.Debugf("Attaching to container %s exec session %s", c.ID(), sessionID)
@@ -121,12 +129,16 @@ func (c *Container) attachToExec(streams *AttachStreams, keys string, resize <-c
 
 	// 2: read from attachFd that the parent process has set up the console socket
 	if _, err := readConmonPipeData(attachFd); err != nil {
-		return -1, err
+		errorInfo.Error = err
+		attachChan <- errorInfo
+		return
 	}
 	// 2: then attach
 	conn, err := net.DialUnix("unixpacket", nil, &net.UnixAddr{Name: socketPath, Net: "unixpacket"})
 	if err != nil {
-		return -1, errors.Wrapf(err, "failed to connect to container's attach socket: %v", socketPath)
+		errorInfo.Error = errors.Wrapf(err, "failed to connect to container's attach socket: %v", socketPath)
+		attachChan <- errorInfo
+		return
 	}
 	defer conn.Close()
 
@@ -135,7 +147,19 @@ func (c *Container) attachToExec(streams *AttachStreams, keys string, resize <-c
 
 	// 4: send start message to child
 	if err := sendDataDownPipe(startFd); err != nil {
-		return -1, err
+		errorInfo.Error = err
+		attachChan <- errorInfo
+		return
+	}
+
+	pid, err := readConmonPipeData(syncFd)
+	// If we failed to create the process, or the runtime exited, exit here
+	attachChan <- attachInfo{
+		ExitCode: pid,
+		Error:    err,
+	}
+	if err != nil {
+		return
 	}
 
 	select {
@@ -149,14 +173,17 @@ func (c *Container) attachToExec(streams *AttachStreams, keys string, resize <-c
 			err = <-receiveStdoutError
 		}
 	}
-	exitCode, err2 := c.readExitCode(sessionID)
+
+	// Finally, read the exit code from the sync fd
+	ec, err2 := readConmonPipeData(syncFd)
 	if err2 != nil {
-		logrus.Debugf("reading exec exit file returned error %s", err2.Error())
-		if err == nil {
-			err = err2
-		}
+		err = err2
 	}
-	return exitCode, err
+	attachChan <- attachInfo{
+		ExitCode: ec,
+		Error:    err,
+	}
+	return
 }
 
 func (c *Container) readExitCode(sessionID string) (int, error) {

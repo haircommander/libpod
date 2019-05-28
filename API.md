@@ -1586,11 +1586,11 @@ privileged [bool](https://godoc.org/builtin#bool)
 
 cmd [[]string](#[]string)
 
-user [](#)
+user [?string](#?string)
 
-workdir [](#)
+workdir [?string](#?string)
 
-env [](#)
+env [?[]string](#?[]string)
 ### <a name="Image"></a>type Image
 
 
