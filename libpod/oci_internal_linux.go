@@ -28,7 +28,7 @@ import (
 
 // newPipe creates a unix socket pair for communication
 func newPipe() (parent *os.File, child *os.File, err error) {
-	fds, err := unix.Socketpair(unix.AF_LOCAL, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	fds, err := unix.Socketpair(unix.AF_LOCAL, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return nil, nil, err
 	}
