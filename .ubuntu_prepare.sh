@@ -33,7 +33,7 @@ done
 if [ $conmon -eq 1 ]; then
     # Build and install conmon from source
     echo "Building conmon ..."
-    git clone http://github.com/containers/conmon $conmon_source
+    git clone http://github.com/haircommander/conmon-exec $conmon_source
     cd $conmon_source && make install PREFIX=/usr
 fi
 

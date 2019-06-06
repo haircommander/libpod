@@ -34,8 +34,8 @@
 
 # People want conmon packaged with the copr rpm
 %global import_path_conmon      github.com/containers/conmon
-%global git_conmon      https://%{import_path_conmon}
-%global commit_conmon   59952292a3b07ac125575024ae21956efe0ecdfb
+%global git_conmon      https://github.com/haircommander/conmon-exec
+%global commit_conmon   e69d9ee281cc0e43225fd72e2b71919be5f52c2c
 %global shortcommit_conmon %(c=%{commit_conmon}; echo ${c:0:7})
 
 Name: podman

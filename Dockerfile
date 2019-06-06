@@ -56,10 +56,10 @@ RUN set -x \
 	&& rm -rf "$GOPATH"
 
 # Install conmon
-ENV CONMON_COMMIT 59952292a3b07ac125575024ae21956efe0ecdfb
+ENV CONMON_COMMIT e69d9ee281cc0e43225fd72e2b71919be5f52c2c
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
-	&& git clone https://github.com/containers/conmon.git "$GOPATH/src/github.com/containers/conmon.git" \
+	&& git clone https://github.com/haircommander/conmon-exec.git "$GOPATH/src/github.com/containers/conmon.git" \
 	&& cd "$GOPATH/src/github.com/containers/conmon.git" \
 	&& git fetch origin --tags \
 	&& git checkout -q "$CONMON_COMMIT" \

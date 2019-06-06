@@ -303,7 +303,7 @@ install_conmon(){
     req_env_var GOPATH CONMON_COMMIT
     DEST="$GOPATH/src/github.com/containers/conmon.git"
     rm -rf "$DEST"
-    ooe.sh git clone https://github.com/containers/conmon.git "$DEST"
+    ooe.sh git clone https://github.com/haircommander/conmon-exec.git "$DEST"
     cd "$DEST"
     ooe.sh git fetch origin --tags
     ooe.sh git checkout -q "$CONMON_COMMIT"
