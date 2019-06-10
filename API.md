@@ -19,6 +19,8 @@ in the [API.md](https://github.com/containers/libpod/blob/master/API.md) file in
 
 [func ContainerConfig(name: string) string](#ContainerConfig)
 
+[func ContainerExecute(opts: ExecOpts) ](#ContainerExecute)
+
 [func ContainerExists(name: string) int](#ContainerExists)
 
 [func ContainerInspectData(name: string, size: bool) string](#ContainerInspectData)
@@ -203,6 +205,8 @@ in the [API.md](https://github.com/containers/libpod/blob/master/API.md) file in
 
 [type Event](#Event)
 
+[type ExecOpts](#ExecOpts)
+
 [type Image](#Image)
 
 [type ImageHistory](#ImageHistory)
@@ -334,6 +338,11 @@ ID.  On successful checkpoint, the id of the checkpointed container is returned.
 method ContainerConfig(name: [string](https://godoc.org/builtin#string)) [string](https://godoc.org/builtin#string)</div>
 ContainerConfig returns a container's config in string form. This call is for
 development of Podman only and generally should not be used.
+### <a name="ContainerExecute"></a>func ContainerExecute
+<div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
+
+method ContainerExecute(opts: [ExecOpts](#ExecOpts)) </div>
+ContainerExecute runs executes a command in the given container.
 ### <a name="ContainerExists"></a>func ContainerExists
 <div style="background-color: #E8E8E8; padding: 15px; margin: 10px; border-radius: 10px;">
 
@@ -1565,6 +1574,23 @@ status [string](https://godoc.org/builtin#string)
 time [string](https://godoc.org/builtin#string)
 
 type [string](https://godoc.org/builtin#string)
+### <a name="ExecOpts"></a>type ExecOpts
+
+
+
+name [string](https://godoc.org/builtin#string)
+
+tty [bool](https://godoc.org/builtin#bool)
+
+privileged [bool](https://godoc.org/builtin#bool)
+
+cmd [[]string](#[]string)
+
+user [](#)
+
+workdir [](#)
+
+env [](#)
 ### <a name="Image"></a>type Image
 
 

@@ -43,12 +43,11 @@ func healthCheckCmd(c *cliconfig.HealthCheckValues) error {
 		return errors.Wrap(err, "could not get runtime")
 	}
 	status, err := runtime.HealthCheck(c)
-	if err != nil {
-		if status == libpod.HealthCheckFailure {
-			fmt.Println("\nunhealthy")
-		}
-		return err
+	if status == libpod.HealthCheckFailure {
+		fmt.Println("\nunhealthy")
+		exitCode = 1
+	} else {
+		fmt.Println("healthy")
 	}
-	fmt.Println("healthy")
-	return nil
+	return err
 }

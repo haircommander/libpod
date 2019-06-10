@@ -13,6 +13,25 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+// ExecAttachCtr execs and attaches to a container
+func ExecAttachCtr(ctx context.Context, ctr *libpod.Container, tty, privileged bool, env, cmd []string, user, workDir string, streams *libpod.AttachStreams, preserveFDs int, detachKeys string) (int, error) {
+	resize := make(chan remotecommand.TerminalSize)
+
+	haveTerminal := terminal.IsTerminal(int(os.Stdin.Fd()))
+
+	// Check if we are attached to a terminal. If we are, generate resize
+	// events, and set the terminal to raw mode
+	if haveTerminal && tty {
+		cancel, oldTermState, err := handleTerminalAttach(ctx, resize)
+		if err != nil {
+			return -1, err
+		}
+		defer cancel()
+		defer restoreTerminal(oldTermState)
+	}
+	return ctr.Exec(tty, privileged, env, cmd, user, workDir, streams, preserveFDs, resize, detachKeys)
+}
+
 // StartAttachCtr starts and (if required) attaches to a container
 func StartAttachCtr(ctx context.Context, ctr *libpod.Container, stdout, stderr, stdin *os.File, detachKeys string, sigProxy bool, startContainer bool, recursive bool) error {
 	resize := make(chan remotecommand.TerminalSize)
@@ -22,21 +41,11 @@ func StartAttachCtr(ctx context.Context, ctr *libpod.Container, stdout, stderr, 
 	// Check if we are attached to a terminal. If we are, generate resize
 	// events, and set the terminal to raw mode
 	if haveTerminal && ctr.Spec().Process.Terminal {
-		logrus.Debugf("Handling terminal attach")
-
-		subCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
-		resizeTty(subCtx, resize)
-
-		oldTermState, err := term.SaveState(os.Stdin.Fd())
+		cancel, oldTermState, err := handleTerminalAttach(ctx, resize)
 		if err != nil {
-			return errors.Wrapf(err, "unable to save terminal state")
+			return err
 		}
-
-		logrus.SetFormatter(&RawTtyFormatter{})
-		term.SetRawTerminal(os.Stdin.Fd())
-
+		defer cancel()
 		defer restoreTerminal(oldTermState)
 	}
 
@@ -88,4 +97,24 @@ func StartAttachCtr(ctx context.Context, ctr *libpod.Container, stdout, stderr, 
 	}
 
 	return nil
+}
+
+func handleTerminalAttach(ctx context.Context, resize chan remotecommand.TerminalSize) (context.CancelFunc, *term.State, error) {
+	logrus.Debugf("Handling terminal attach")
+
+	subCtx, cancel := context.WithCancel(ctx)
+
+	resizeTty(subCtx, resize)
+
+	oldTermState, err := term.SaveState(os.Stdin.Fd())
+	if err != nil {
+		// allow caller to not have to do any cleaning up if we error here
+		cancel()
+		return nil, nil, errors.Wrapf(err, "unable to save terminal state")
+	}
+
+	logrus.SetFormatter(&RawTtyFormatter{})
+	term.SetRawTerminal(os.Stdin.Fd())
+
+	return cancel, oldTermState, nil
 }

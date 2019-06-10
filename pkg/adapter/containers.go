@@ -20,6 +20,7 @@ import (
 	"github.com/containers/image/manifest"
 	"github.com/containers/libpod/cmd/podman/cliconfig"
 	"github.com/containers/libpod/cmd/podman/shared"
+	"github.com/containers/libpod/cmd/podman/shared/parse"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/libpod/image"
 	"github.com/containers/libpod/pkg/adapter/shortcuts"
@@ -890,11 +891,83 @@ func (r *LocalRuntime) execPS(c *libpod.Container, args []string) ([]string, err
 	}()
 
 	cmd := append([]string{"ps"}, args...)
-	if err := c.Exec(false, false, []string{}, cmd, "", "", streams, 0); err != nil {
+	ec, err := c.Exec(false, false, []string{}, cmd, "", "", streams, 0, nil, "")
+	if err != nil {
 		return nil, err
+	} else if ec != 0 {
+		return nil, errors.Errorf("Runtime failed with exit status: %d and output: %s", ec, strings.Join(psOutput, " "))
 	}
 
 	return psOutput, nil
+}
+
+// ContainerExecute executes a command in the container
+func (r *LocalRuntime) ContainerExecute(ctx context.Context, cli *cliconfig.ExecValues) (int, error) {
+	var (
+		ctr *Container
+		err error
+		cmd []string
+	)
+	// default invalid command exit code
+	ec := 125
+
+	if cli.Latest {
+		if ctr, err = r.GetLatestContainer(); err != nil {
+			return ec, err
+		}
+		cmd = cli.InputArgs[0:]
+	} else {
+		if ctr, err = r.LookupContainer(cli.InputArgs[0]); err != nil {
+			return ec, err
+		}
+		cmd = cli.InputArgs[1:]
+	}
+
+	if cli.PreserveFDs > 0 {
+		entries, err := ioutil.ReadDir("/proc/self/fd")
+		if err != nil {
+			return ec, errors.Wrapf(err, "Exec unable to read /proc/self/fd")
+		}
+
+		m := make(map[int]bool)
+		for _, e := range entries {
+			i, err := strconv.Atoi(e.Name())
+			if err != nil {
+				return ec, errors.Wrapf(err, "Exec cannot parse %s in /proc/self/fd", e.Name())
+			}
+			m[i] = true
+		}
+
+		for i := 3; i < 3+cli.PreserveFDs; i++ {
+			if _, found := m[i]; !found {
+				return ec, errors.New("invalid --preserve-fds=N specified. Not enough FDs available")
+			}
+		}
+	}
+
+	// Validate given environment variables
+	env := map[string]string{}
+	if err := parse.ReadKVStrings(env, []string{}, cli.Env); err != nil {
+		return ec, errors.Wrapf(err, "Exec unable to process environment variables")
+	}
+
+	// Build env slice of key=value strings for Exec
+	envs := []string{}
+	for k, v := range env {
+		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	streams := new(libpod.AttachStreams)
+	streams.OutputStream = os.Stdout
+	streams.ErrorStream = os.Stderr
+	if cli.Interactive {
+		streams.InputStream = os.Stdin
+		streams.AttachInput = true
+	}
+	streams.AttachOutput = true
+	streams.AttachError = true
+
+	return ExecAttachCtr(ctx, ctr.Container, cli.Tty, cli.Privileged, envs, cmd, cli.User, cli.Workdir, streams, cli.PreserveFDs, cli.DetachKeys)
 }
 
 // Prune removes stopped containers

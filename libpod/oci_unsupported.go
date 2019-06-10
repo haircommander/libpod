@@ -4,18 +4,15 @@ package libpod
 
 import (
 	"os"
-	"os/exec"
-)
 
-func (r *OCIRuntime) moveConmonToCgroup(ctr *Container, cgroupParent string, cmd *exec.Cmd) error {
-	return ErrOSNotSupported
-}
+	"k8s.io/client-go/tools/remotecommand"
+)
 
 func newPipe() (parent *os.File, child *os.File, err error) {
 	return nil, nil, ErrNotImplemented
 }
 
-func (r *OCIRuntime) createContainer(ctr *Container, cgroupParent string, restoreOptions *ContainerCheckpointOptions) (err error) {
+func (r *OCIRuntime) createContainer(ctr *Container, restoreOptions *ContainerCheckpointOptions) (err error) {
 	return ErrNotImplemented
 }
 
@@ -37,4 +34,12 @@ func (r *OCIRuntime) execStopContainer(ctr *Container, timeout uint) error {
 
 func (r *OCIRuntime) stopContainer(ctr *Container, timeout uint) error {
 	return ErrOSNotSupported
+}
+
+func readConmonPipeData(pipe *os.File) (int, error) {
+	return -1, ErrOSNotSupported
+}
+
+func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty bool, cwd, user, sessionID string, streams *AttachStreams, preserveFDs int, resize chan remotecommand.TerminalSize, detachKeys string) (int, chan attachInfo, error) {
+	return -1, nil, ErrOSNotSupported
 }
