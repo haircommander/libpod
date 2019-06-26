@@ -35,8 +35,9 @@ func init() {
 	execCommand.SetUsageTemplate(UsageTemplate())
 	flags := execCommand.Flags()
 	flags.SetInterspersed(false)
+	flags.StringVar(&execCommand.DetachKeys, "detach-keys", "", "Override the key sequence for detaching a container. Format is a single character [a-Z] or ctrl-<value> where <value> is one of: a-z, @, ^, [, , or _")
 	flags.StringArrayVarP(&execCommand.Env, "env", "e", []string{}, "Set environment variables")
-	flags.BoolVarP(&execCommand.Interfactive, "interactive", "i", false, "Not supported.  All exec commands are interactive by default")
+	flags.BoolVarP(&execCommand.Interactive, "interactive", "i", false, "Keep STDIN open even if not attached")
 	flags.BoolVarP(&execCommand.Latest, "latest", "l", false, "Act on the latest container podman is aware of")
 	flags.BoolVar(&execCommand.Privileged, "privileged", false, "Give the process extended Linux capabilities inside the container.  The default is false")
 	flags.BoolVarP(&execCommand.Tty, "tty", "t", false, "Allocate a pseudo-TTY. The default is false")
@@ -45,6 +46,7 @@ func init() {
 	flags.IntVar(&execCommand.PreserveFDs, "preserve-fds", 0, "Pass N additional file descriptors to the container")
 	flags.StringVarP(&execCommand.Workdir, "workdir", "w", "", "Working directory inside the container")
 	markFlagHiddenForRemoteClient("latest", flags)
+	markFlagHiddenForRemoteClient("preserve-fds", flags)
 }
 
 func execCmd(c *cliconfig.ExecValues) error {
@@ -66,7 +68,7 @@ func execCmd(c *cliconfig.ExecValues) error {
 	}
 	defer runtime.Shutdown(false)
 
-	err = runtime.Exec(c, cmd)
+	exitCode, err = runtime.Exec(getContext(), c, cmd)
 	if errors.Cause(err) == define.ErrCtrStateInvalid {
 		exitCode = 126
 	}

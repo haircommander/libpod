@@ -10,6 +10,11 @@ podman\-exec - Execute a command in a running container
 **podman exec** executes a command in a running container.
 
 ## OPTIONS
+
+**--detach-keys**
+
+Override the key sequence for detaching a container. Format is a single character `[a-Z]` or `ctrl-<value>` where `<value>` is one of: `a-z`, `@`, `^`, `[`, `,` or `_`.
+
 **--env**, **-e**
 
 You may specify arbitrary environment variables that are available for the
@@ -17,12 +22,12 @@ command to be executed.
 
 **--interactive**, **-i**
 
-Not supported.  All exec commands are interactive by default.
+When set to true, keep stdin open even if not attached. The default is *false*.
 
 **--latest**, **-l**
 
 Instead of providing the container name or ID, use the last created container. If you use methods other than Podman
-to run containers such as CRI-O, the last started  container could be from either of those methods.
+to run containers such as CRI-O, the last started container could be from either of those methods.
 
 The latest option is not supported on the remote client.
 
