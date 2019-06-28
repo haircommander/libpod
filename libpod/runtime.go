@@ -663,6 +663,7 @@ func makeRuntime(ctx context.Context, runtime *Runtime) (err error) {
 			continue
 		}
 		foundConmon = true
+		CheckConmonVersion(path)
 		runtime.conmonPath = path
 		break
 	}

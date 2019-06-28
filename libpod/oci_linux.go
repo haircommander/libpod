@@ -146,6 +146,10 @@ func (r *OCIRuntime) conmonPackage() string {
 // TODO: Convert to use conmon
 // TODO: add --pid-file and use that to generate exec session tracking
 func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty bool, cwd, user, sessionID string, streams *AttachStreams, preserveFDs int, resize chan remotecommand.TerminalSize, detachKeys string) (int, chan error, error) {
+	_, err := CheckConmonVersion(r.conmonPath)
+	if err != nil {
+		fmt.Errorf(err.Error())
+	}
 	if len(cmd) == 0 {
 		return -1, nil, errors.Wrapf(define.ErrInvalidArg, "must provide a command to execute")
 	}

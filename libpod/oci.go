@@ -417,3 +417,16 @@ func (r *OCIRuntime) featureCheckCheckpointing() bool {
 	}
 	return false
 }
+
+func CheckConmonVersion(conmonPath string) (bool, error) {
+	cmd := exec.Command(conmonPath, "--version")
+	if err := cmd.Run(); err != nil {
+		return false, err
+	}
+	var output string
+	if outp, err := cmd.Output(); err == nil {
+		output = string(outp)
+	}
+	fmt.Println(output)
+	return true, nil
+}
