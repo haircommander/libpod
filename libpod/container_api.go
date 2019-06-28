@@ -283,7 +283,7 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user, workDir 
 		if pid < 0 {
 			ec = -1 * pid
 		}
-		return ec, errors.Wrapf(err, "error exec'ing in %s", c.ID())
+		return ec, err
 	}
 
 	// We have the PID, add it to state
@@ -308,17 +308,20 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user, workDir 
 		c.lock.Unlock()
 	}
 
-	attachErr := <-attachChan
-	if attachErr != nil {
-		logrus.Debugf(attachErr.Error())
-	}
+	lastErr := <-attachChan
 
 	exitCode, err := c.readExecExitCode(sessionID)
 	if err != nil {
-		logrus.Debugf("reading exec exit file returned error %s", err.Error())
-		if attachErr == nil {
-			attachErr = err
+		if lastErr != nil {
+			logrus.Errorf(lastErr.Error())
 		}
+		lastErr = err
+	}
+	if exitCode != 0 {
+		if lastErr != nil {
+			logrus.Errorf(lastErr.Error())
+		}
+		lastErr = errors.Wrapf(define.ErrOCIRuntime, "non zero exit code: %d", exitCode)
 	}
 
 	// Lock again
@@ -328,7 +331,8 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user, workDir 
 
 	// Sync the container again to pick up changes in state
 	if err := c.syncContainer(); err != nil {
-		return defaultExecExitCode, errors.Wrapf(err, "error syncing container %s state to remove exec session %s", c.ID(), sessionID)
+		logrus.Errorf("error syncing container %s state to remove exec session %s", c.ID(), sessionID)
+		return exitCode, lastErr
 	}
 
 	// Remove the exec session from state
@@ -336,7 +340,7 @@ func (c *Container) Exec(tty, privileged bool, env, cmd []string, user, workDir 
 	if err := c.save(); err != nil {
 		logrus.Errorf("Error removing exec session %s from container %s state: %v", sessionID, c.ID(), err)
 	}
-	return exitCode, attachErr
+	return exitCode, lastErr
 }
 
 // AttachStreams contains streams that will be attached to the container

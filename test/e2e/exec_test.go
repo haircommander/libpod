@@ -163,10 +163,30 @@ var _ = Describe("Podman exec", func() {
 
 		session := podmanTest.Podman([]string{"exec", "-l", "--workdir", "/missing", "pwd"})
 		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(1))
+		Expect(session.ExitCode()).To(Equal(127))
 
 		session = podmanTest.Podman([]string{"exec", "-l", "-w", "/missing", "pwd"})
 		session.WaitWithDefaultTimeout()
-		Expect(session.ExitCode()).To(Equal(1))
+		Expect(session.ExitCode()).To(Equal(127))
+	})
+
+	It("podman exec cannot be invoked", func() {
+		setup := podmanTest.RunTopContainer("test1")
+		setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
+
+		session := podmanTest.Podman([]string{"exec", "test1", "/etc"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(126))
+	})
+
+	It("podman exec command not found", func() {
+		setup := podmanTest.RunTopContainer("test1")
+		setup.WaitWithDefaultTimeout()
+		Expect(setup.ExitCode()).To(Equal(0))
+
+		session := podmanTest.Podman([]string{"exec", "test1", "notthere"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(127))
 	})
 })

@@ -132,14 +132,19 @@ func (c *Container) runHealthCheck() (HealthCheckStatus, error) {
 	logrus.Debugf("executing health check command %s for %s", strings.Join(newCommand, " "), c.ID())
 	timeStart := time.Now()
 	hcResult := HealthCheckSuccess
-	ec, hcErr := c.Exec(false, false, []string{}, newCommand, "", "", streams, 0, nil, "")
+	_, hcErr := c.Exec(false, false, []string{}, newCommand, "", "", streams, 0, nil, "")
 	if hcErr != nil {
-		hcResult = HealthCheckFailure
-		returnCode = 1
-	} else if ec != 0 {
-		hcResult = HealthCheckFailure
-		returnCode = ec
-		hcErr = errors.Errorf("Healthcheck command exited with non-zero status: %d", ec)
+		errCause := errors.Cause(hcErr)
+		if errCause == define.ErrOCIRuntimeNotFound ||
+			errCause == define.ErrOCIRuntimePermissionDenied ||
+			errCause == define.ErrOCIRuntime {
+			hcResult = HealthCheckFailure
+			returnCode = 1
+			hcErr = nil
+		} else {
+			hcResult = HealthCheckFailure
+			returnCode = 125
+		}
 	}
 	timeEnd := time.Now()
 	if c.HealthCheckConfig().StartPeriod > 0 {

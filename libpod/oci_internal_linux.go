@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -419,13 +420,13 @@ func readConmonPipeData(pipe *os.File, ociLog string) (int, error) {
 				if err == nil {
 					var ociErr ociError
 					if err := json.Unmarshal(ociLogData, &ociErr); err == nil {
-						return ss.si.Data, errors.Wrapf(define.ErrOCIRuntime, "%s", strings.Trim(ociErr.Msg, "\n"))
+						return ss.si.Data, getOCIRuntimeError(ociErr.Msg)
 					}
 				}
 			}
 			// If we failed to parse the JSON errors, then print the output as it is
 			if ss.si.Message != "" {
-				return ss.si.Data, errors.Wrapf(define.ErrOCIRuntime, "%s", ss.si.Message)
+				return ss.si.Data, getOCIRuntimeError(ss.si.Message)
 			}
 			return ss.si.Data, errors.Wrapf(define.ErrInternal, "container create failed")
 		}
@@ -434,6 +435,16 @@ func readConmonPipeData(pipe *os.File, ociLog string) (int, error) {
 		return -1, errors.Wrapf(define.ErrInternal, "container creation timeout")
 	}
 	return data, nil
+}
+
+func getOCIRuntimeError(runtimeMsg string) error {
+	if match, _ := regexp.MatchString(".*permission denied.*", runtimeMsg); match {
+		return errors.Wrapf(define.ErrOCIRuntimePermissionDenied, "%s", strings.Trim(runtimeMsg, "\n"))
+	}
+	if match, _ := regexp.MatchString(".*executable file not found in.*", runtimeMsg); match {
+		return errors.Wrapf(define.ErrOCIRuntimeNotFound, "%s", strings.Trim(runtimeMsg, "\n"))
+	}
+	return errors.Wrapf(define.ErrOCIRuntimeNotFound, "%s", strings.Trim(runtimeMsg, "\n"))
 }
 
 // writeConmonPipeData writes nonse data to a pipe

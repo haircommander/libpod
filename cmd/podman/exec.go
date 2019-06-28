@@ -69,8 +69,11 @@ func execCmd(c *cliconfig.ExecValues) error {
 	defer runtime.Shutdown(false)
 
 	exitCode, err = runtime.Exec(getContext(), c, cmd)
-	if errors.Cause(err) == define.ErrCtrStateInvalid {
+	if errors.Cause(err) == define.ErrOCIRuntimePermissionDenied {
 		exitCode = 126
+	}
+	if errors.Cause(err) == define.ErrOCIRuntimeNotFound {
+		exitCode = 127
 	}
 	return err
 }
