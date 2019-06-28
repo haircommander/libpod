@@ -246,7 +246,8 @@ func (r *OCIRuntime) configureConmonEnv(runtimeDir string) ([]string, []*os.File
 
 // sharedConmonArgs takes common arguments for exec and create/restore and formats them for the conmon CLI
 func (r *OCIRuntime) sharedConmonArgs(ctr *Container, cuuid, bundlePath, pidPath, logPath, exitDir, ociLogPath string) []string {
-	args := []string{}
+	// set the conmon API version to be able to use the correct sync struct keys
+	args := []string{"--api-version", "1"}
 	if r.cgroupManager == SystemdCgroupsManager {
 		args = append(args, "-s")
 	}
