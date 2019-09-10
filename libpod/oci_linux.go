@@ -233,7 +233,7 @@ func (r *OCIRuntime) execContainer(c *Container, cmd, capAdd, env []string, tty 
 	}
 
 	if tty {
-		args = append(args, "-t")
+		args = append(args, "-t", "--caller-create-fifo")
 	}
 
 	// Append container ID and command

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"syscall"
 	"os"
 	"path/filepath"
 
@@ -45,7 +46,7 @@ func (c *Container) attach(streams *AttachStreams, keys string, resize <-chan re
 
 	logrus.Debugf("Attaching to container %s", c.ID())
 
-	registerResizeFunc(resize, c.bundlePath())
+	registerResizeFunc(resize, c.bundlePath(), false)
 
 	socketPath := buildSocketPath(c.AttachSocketPath())
 
@@ -107,15 +108,17 @@ func (c *Container) attachToExec(streams *AttachStreams, keys string, resize <-c
 
 	logrus.Debugf("Attaching to container %s exec session %s", c.ID(), sessionID)
 
-	registerResizeFunc(resize, c.execBundlePath(sessionID))
-
 	// set up the socket path, such that it is the correct length and location for exec
 	socketPath := buildSocketPath(c.execAttachSocketPath(sessionID))
+
+	registerResizeFunc(resize, c.execBundlePath(sessionID), true)
 
 	// 2: read from attachFd that the parent process has set up the console socket
 	if _, err := readConmonPipeData(attachFd, ""); err != nil {
 		return err
 	}
+
+
 	// 2: then attach
 	conn, err := net.DialUnix("unixpacket", nil, &net.UnixAddr{Name: socketPath, Net: "unixpacket"})
 	if err != nil {
@@ -135,6 +138,7 @@ func (c *Container) attachToExec(streams *AttachStreams, keys string, resize <-c
 		return err
 	}
 
+
 	return readStdio(streams, receiveStdoutError, stdinDone)
 }
 
@@ -150,13 +154,24 @@ func processDetachKeys(keys string) ([]byte, error) {
 	return detachKeys, nil
 }
 
-func registerResizeFunc(resize <-chan remotecommand.TerminalSize, bundlePath string) {
+func registerResizeFunc(resize <-chan remotecommand.TerminalSize, bundlePath string, makeIfNotPresent bool) {
 	kubeutils.HandleResizing(resize, func(size remotecommand.TerminalSize) {
 		controlPath := filepath.Join(bundlePath, "ctl")
 		controlFile, err := os.OpenFile(controlPath, unix.O_WRONLY, 0)
 		if err != nil {
-			logrus.Debugf("Could not open ctl file: %v", err)
-			return
+			if makeIfNotPresent && os.IsNotExist(err) {
+				if err := syscall.Mkfifo(controlPath, 0666); err != nil {
+					logrus.Debugf("Could not open ctl file: %v", err)
+					return
+				}
+				if controlFile, err = os.OpenFile(controlPath, unix.O_WRONLY, 0); err != nil {
+					logrus.Debugf("Could not open ctl file: %v", err)
+					return
+				}
+			} else {
+				logrus.Debugf("Could not open ctl file: %v", err)
+				return
+			}
 		}
 		defer controlFile.Close()
 
