@@ -670,6 +670,8 @@ func getPodPorts(containers []v1.Container) []ocicni.PortMapping {
 func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container, runtime *libpod.Runtime, newImage *image.Image, namespaces map[string]string, volumes map[string]string, podID string) (*createconfig.CreateConfig, error) {
 	var (
 		containerConfig createconfig.CreateConfig
+		namespaceConfig createconfig.NamespaceConfig
+		securityConfig  createconfig.SecurityConfig
 	)
 
 	// The default for MemorySwappiness is -1, not 0
@@ -685,31 +687,28 @@ func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container
 
 	imageData, _ := newImage.Inspect(ctx)
 
-	containerConfig.User = "0"
+	namespaceConfig.User = "0"
 	if imageData != nil {
-		containerConfig.User = imageData.Config.User
+		namespaceConfig.User = imageData.Config.User
 	}
 
 	if containerYAML.SecurityContext != nil {
-		if containerConfig.SecurityOpts != nil {
-			if containerYAML.SecurityContext.ReadOnlyRootFilesystem != nil {
-				containerConfig.ReadOnlyRootfs = *containerYAML.SecurityContext.ReadOnlyRootFilesystem
-			}
-			if containerYAML.SecurityContext.Privileged != nil {
-				containerConfig.Privileged = *containerYAML.SecurityContext.Privileged
-			}
+		if containerYAML.SecurityContext.ReadOnlyRootFilesystem != nil {
+			securityConfig.ReadOnlyRootfs = *containerYAML.SecurityContext.ReadOnlyRootFilesystem
+		}
+		if containerYAML.SecurityContext.Privileged != nil {
+			securityConfig.Privileged = *containerYAML.SecurityContext.Privileged
+		}
 
-			if containerYAML.SecurityContext.AllowPrivilegeEscalation != nil {
-				containerConfig.NoNewPrivs = !*containerYAML.SecurityContext.AllowPrivilegeEscalation
-			}
-
+		if containerYAML.SecurityContext.AllowPrivilegeEscalation != nil {
+			securityConfig.NoNewPrivs = !*containerYAML.SecurityContext.AllowPrivilegeEscalation
 		}
 		if caps := containerYAML.SecurityContext.Capabilities; caps != nil {
 			for _, capability := range caps.Add {
-				containerConfig.CapAdd = append(containerConfig.CapAdd, string(capability))
+				securityConfig.CapAdd = append(securityConfig.CapAdd, string(capability))
 			}
 			for _, capability := range caps.Drop {
-				containerConfig.CapDrop = append(containerConfig.CapDrop, string(capability))
+				securityConfig.CapDrop = append(securityConfig.CapDrop, string(capability))
 			}
 		}
 	}
@@ -732,19 +731,21 @@ func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container
 	containerConfig.StopSignal = 15
 
 	// If the user does not pass in ID mappings, just set to basics
-	if containerConfig.IDMappings == nil {
-		containerConfig.IDMappings = &storage.IDMappingOptions{}
+	if namespaceConfig.IDMappings == nil {
+		namespaceConfig.IDMappings = &storage.IDMappingOptions{}
 	}
 
-	containerConfig.NetMode = ns.NetworkMode(namespaces["net"])
-	containerConfig.IpcMode = ns.IpcMode(namespaces["ipc"])
-	containerConfig.UtsMode = ns.UTSMode(namespaces["uts"])
+	namespaceConfig.NetMode = ns.NetworkMode(namespaces["net"])
+	namespaceConfig.IpcMode = ns.IpcMode(namespaces["ipc"])
+	namespaceConfig.UtsMode = ns.UTSMode(namespaces["uts"])
 	// disabled in code review per mheon
 	//containerConfig.PidMode = ns.PidMode(namespaces["pid"])
-	containerConfig.UsernsMode = ns.UsernsMode(namespaces["user"])
+	namespaceConfig.UsernsMode = ns.UsernsMode(namespaces["user"])
 	if len(containerConfig.WorkDir) == 0 {
 		containerConfig.WorkDir = "/"
 	}
+	containerConfig.Namespaces = namespaceConfig
+	containerConfig.Security = securityConfig
 
 	// Set default environment variables and incorporate data from image, if necessary
 	envs := shared.EnvVariablesFromData(imageData)

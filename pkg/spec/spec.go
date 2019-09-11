@@ -45,14 +45,14 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 	canMountSys := true
 
 	isRootless := rootless.IsRootless()
-	hasUserns := config.UsernsMode.IsContainer() || config.UsernsMode.IsNS() || len(config.IDMappings.UIDMap) > 0 || len(config.IDMappings.GIDMap) > 0
-	inUserNS := isRootless || (hasUserns && !config.UsernsMode.IsHost())
+	hasUserns := config.Namespaces.UsernsMode.IsContainer() || config.Namespaces.UsernsMode.IsNS() || len(config.Namespaces.IDMappings.UIDMap) > 0 || len(config.Namespaces.IDMappings.GIDMap) > 0
+	inUserNS := isRootless || (hasUserns && !config.Namespaces.UsernsMode.IsHost())
 
-	if inUserNS && config.NetMode.IsHost() {
+	if inUserNS && config.Namespaces.NetMode.IsHost() {
 		canMountSys = false
 	}
 
-	if config.Privileged && canMountSys {
+	if config.Security.Privileged && canMountSys {
 		cgroupPerm = "rw"
 		g.RemoveMount("/sys")
 		sysMnt := spec.Mount{
@@ -66,7 +66,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		addCgroup = false
 		g.RemoveMount("/sys")
 		r := "ro"
-		if config.Privileged {
+		if config.Security.Privileged {
 			r = "rw"
 		}
 		sysMnt := spec.Mount{
@@ -76,7 +76,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 			Options:     []string{"rprivate", "nosuid", "noexec", "nodev", r, "rbind"},
 		}
 		g.AddMount(sysMnt)
-		if !config.Privileged && isRootless {
+		if !config.Security.Privileged && isRootless {
 			g.AddLinuxMaskedPaths("/sys/kernel")
 		}
 	}
@@ -90,9 +90,9 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 	}
 	// When using a different user namespace, check that the GID 5 is mapped inside
 	// the container.
-	if gid5Available && len(config.IDMappings.GIDMap) > 0 {
+	if gid5Available && len(config.Namespaces.IDMappings.GIDMap) > 0 {
 		mappingFound := false
-		for _, r := range config.IDMappings.GIDMap {
+		for _, r := range config.Namespaces.IDMappings.GIDMap {
 			if r.ContainerID <= 5 && 5 < r.ContainerID+r.Size {
 				mappingFound = true
 				break
@@ -115,7 +115,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		g.AddMount(devPts)
 	}
 
-	if inUserNS && config.IpcMode.IsHost() {
+	if inUserNS && config.Namespaces.IpcMode.IsHost() {
 		g.RemoveMount("/dev/mqueue")
 		devMqueue := spec.Mount{
 			Destination: "/dev/mqueue",
@@ -125,7 +125,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		}
 		g.AddMount(devMqueue)
 	}
-	if inUserNS && config.PidMode.IsHost() {
+	if inUserNS && config.Namespaces.PidMode.IsHost() {
 		g.RemoveMount("/proc")
 		procMount := spec.Mount{
 			Destination: "/proc",
@@ -152,9 +152,9 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 	for key, val := range config.Annotations {
 		g.AddAnnotation(key, val)
 	}
-	g.SetRootReadonly(config.ReadOnlyRootfs)
+	g.SetRootReadonly(config.Security.ReadOnlyRootfs)
 
-	if config.HTTPProxy {
+	if config.Namespaces.HTTPProxy {
 		for _, envSpec := range []string{
 			"http_proxy",
 			"HTTP_PROXY",
@@ -172,15 +172,15 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		}
 	}
 
-	hostname := config.Hostname
+	hostname := config.Namespaces.Hostname
 	if hostname == "" {
-		if utsCtrID := config.UtsMode.Container(); utsCtrID != "" {
+		if utsCtrID := config.Namespaces.UtsMode.Container(); utsCtrID != "" {
 			utsCtr, err := runtime.GetContainer(utsCtrID)
 			if err != nil {
 				return nil, errors.Wrapf(err, "unable to retrieve hostname from dependency container %s", utsCtrID)
 			}
 			hostname = utsCtr.Hostname()
-		} else if config.NetMode.IsHost() || config.UtsMode.IsHost() {
+		} else if config.Namespaces.NetMode.IsHost() || config.Namespaces.UtsMode.IsHost() {
 			hostname, err = os.Hostname()
 			if err != nil {
 				return nil, errors.Wrap(err, "unable to retrieve hostname of the host")
@@ -190,7 +190,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		}
 	}
 	g.RemoveHostname()
-	if config.Hostname != "" || !config.UtsMode.IsHost() {
+	if config.Namespaces.Hostname != "" || !config.Namespaces.UtsMode.IsHost() {
 		// Set the hostname in the OCI configuration only
 		// if specified by the user or if we are creating
 		// a new UTS namespace.
@@ -270,7 +270,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 	}
 
 	// Devices
-	if config.Privileged {
+	if config.Security.Privileged {
 		// If privileged, we need to add all the host devices to the
 		// spec.  We do not add the user provided ones because we are
 		// already adding them all.
@@ -285,17 +285,17 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		}
 	}
 
-	for _, uidmap := range config.IDMappings.UIDMap {
+	for _, uidmap := range config.Namespaces.IDMappings.UIDMap {
 		g.AddLinuxUIDMapping(uint32(uidmap.HostID), uint32(uidmap.ContainerID), uint32(uidmap.Size))
 	}
-	for _, gidmap := range config.IDMappings.GIDMap {
+	for _, gidmap := range config.Namespaces.IDMappings.GIDMap {
 		g.AddLinuxGIDMapping(uint32(gidmap.HostID), uint32(gidmap.ContainerID), uint32(gidmap.Size))
 	}
 	// SECURITY OPTS
-	g.SetProcessNoNewPrivileges(config.NoNewPrivs)
+	g.SetProcessNoNewPrivileges(config.Security.NoNewPrivs)
 
-	if !config.Privileged {
-		g.SetProcessApparmorProfile(config.ApparmorProfile)
+	if !config.Security.Privileged {
+		g.SetProcessApparmorProfile(config.Security.ApparmorProfile)
 	}
 
 	blockAccessToKernelFilesystems(config, &g)
@@ -361,7 +361,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 
 	// HANDLE CAPABILITIES
 	// NOTE: Must happen before SECCOMP
-	if !config.Privileged {
+	if !config.Security.Privileged {
 		if err := setupCapabilities(config, configSpec); err != nil {
 			return nil, err
 		}
@@ -371,7 +371,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 
 	// HANDLE SECCOMP
 
-	if config.SeccompProfilePath != "unconfined" {
+	if config.Security.SeccompProfilePath != "unconfined" {
 		seccompConfig, err := getSeccompConfig(config, configSpec)
 		if err != nil {
 			return nil, err
@@ -380,7 +380,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 	}
 
 	// Clear default Seccomp profile from Generator for privileged containers
-	if config.SeccompProfilePath == "unconfined" || config.Privileged {
+	if config.Security.SeccompProfilePath == "unconfined" || config.Security.Privileged {
 		configSpec.Linux.Seccomp = nil
 	}
 
@@ -420,7 +420,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		}
 	}
 
-	switch config.Cgroups {
+	switch config.Namespaces.Cgroups {
 	case "disabled":
 		if addedResources {
 			return nil, errors.New("cannot specify resource limits when cgroups are disabled is specified")
@@ -451,13 +451,13 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		configSpec.Annotations[libpod.InspectAnnotationVolumesFrom] = strings.Join(config.VolumesFrom, ",")
 	}
 
-	if config.Privileged {
+	if config.Security.Privileged {
 		configSpec.Annotations[libpod.InspectAnnotationPrivileged] = libpod.InspectResponseTrue
 	} else {
 		configSpec.Annotations[libpod.InspectAnnotationPrivileged] = libpod.InspectResponseFalse
 	}
 
-	if config.PublishAll {
+	if config.Namespaces.PublishAll {
 		configSpec.Annotations[libpod.InspectAnnotationPublishAll] = libpod.InspectResponseTrue
 	} else {
 		configSpec.Annotations[libpod.InspectAnnotationPublishAll] = libpod.InspectResponseFalse
@@ -469,7 +469,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 		configSpec.Annotations[libpod.InspectAnnotationInit] = libpod.InspectResponseFalse
 	}
 
-	for _, opt := range config.SecurityOpts {
+	for _, opt := range config.Security.SecurityOpts {
 		// Split on both : and =
 		splitOpt := strings.Split(opt, "=")
 		if len(splitOpt) == 1 {
@@ -492,7 +492,7 @@ func (config *CreateConfig) createConfigToOCISpec(runtime *libpod.Runtime, userM
 }
 
 func blockAccessToKernelFilesystems(config *CreateConfig, g *generate.Generator) {
-	if !config.Privileged {
+	if !config.Security.Privileged {
 		for _, mp := range []string{
 			"/proc/acpi",
 			"/proc/kcore",
@@ -508,7 +508,7 @@ func blockAccessToKernelFilesystems(config *CreateConfig, g *generate.Generator)
 			g.AddLinuxMaskedPaths(mp)
 		}
 
-		if config.PidMode.IsHost() && rootless.IsRootless() {
+		if config.Namespaces.PidMode.IsHost() && rootless.IsRootless() {
 			return
 		}
 
@@ -526,7 +526,7 @@ func blockAccessToKernelFilesystems(config *CreateConfig, g *generate.Generator)
 }
 
 func addPidNS(config *CreateConfig, g *generate.Generator) error {
-	pidMode := config.PidMode
+	pidMode := config.Namespaces.PidMode
 	if IsNS(string(pidMode)) {
 		return g.AddOrReplaceLinuxNamespace(string(spec.PIDNamespace), NS(string(pidMode)))
 	}
@@ -543,8 +543,8 @@ func addPidNS(config *CreateConfig, g *generate.Generator) error {
 }
 
 func addUserNS(config *CreateConfig, g *generate.Generator) error {
-	if IsNS(string(config.UsernsMode)) {
-		if err := g.AddOrReplaceLinuxNamespace(string(spec.UserNamespace), NS(string(config.UsernsMode))); err != nil {
+	if IsNS(string(config.Namespaces.UsernsMode)) {
+		if err := g.AddOrReplaceLinuxNamespace(string(spec.UserNamespace), NS(string(config.Namespaces.UsernsMode))); err != nil {
 			return err
 		}
 		// runc complains if no mapping is specified, even if we join another ns.  So provide a dummy mapping
@@ -552,7 +552,7 @@ func addUserNS(config *CreateConfig, g *generate.Generator) error {
 		g.AddLinuxGIDMapping(uint32(0), uint32(0), uint32(1))
 	}
 
-	if (len(config.IDMappings.UIDMap) > 0 || len(config.IDMappings.GIDMap) > 0) && !config.UsernsMode.IsHost() {
+	if (len(config.Namespaces.IDMappings.UIDMap) > 0 || len(config.Namespaces.IDMappings.GIDMap) > 0) && !config.Namespaces.UsernsMode.IsHost() {
 		if err := g.AddOrReplaceLinuxNamespace(string(spec.UserNamespace), ""); err != nil {
 			return err
 		}
@@ -561,7 +561,7 @@ func addUserNS(config *CreateConfig, g *generate.Generator) error {
 }
 
 func addNetNS(config *CreateConfig, g *generate.Generator) error {
-	netMode := config.NetMode
+	netMode := config.Namespaces.NetMode
 	if netMode.IsHost() {
 		logrus.Debug("Using host netmode")
 		return g.RemoveLinuxNamespace(string(spec.NetworkNamespace))
@@ -591,7 +591,7 @@ func addNetNS(config *CreateConfig, g *generate.Generator) error {
 }
 
 func addUTSNS(config *CreateConfig, g *generate.Generator) error {
-	utsMode := config.UtsMode
+	utsMode := config.Namespaces.UtsMode
 	if IsNS(string(utsMode)) {
 		return g.AddOrReplaceLinuxNamespace(string(spec.UTSNamespace), NS(string(utsMode)))
 	}
@@ -605,7 +605,7 @@ func addUTSNS(config *CreateConfig, g *generate.Generator) error {
 }
 
 func addIpcNS(config *CreateConfig, g *generate.Generator) error {
-	ipcMode := config.IpcMode
+	ipcMode := config.Namespaces.IpcMode
 	if IsNS(string(ipcMode)) {
 		return g.AddOrReplaceLinuxNamespace(string(spec.IPCNamespace), NS(string(ipcMode)))
 	}
@@ -620,7 +620,7 @@ func addIpcNS(config *CreateConfig, g *generate.Generator) error {
 }
 
 func addCgroupNS(config *CreateConfig, g *generate.Generator) error {
-	cgroupMode := config.CgroupMode
+	cgroupMode := config.Namespaces.CgroupMode
 	if cgroupMode.IsNS() {
 		return g.AddOrReplaceLinuxNamespace(string(spec.CgroupNamespace), NS(string(cgroupMode)))
 	}
@@ -691,10 +691,10 @@ func setupCapabilities(config *CreateConfig, configSpec *spec.Spec) error {
 	var err error
 	var caplist []string
 	bounding := configSpec.Process.Capabilities.Bounding
-	if useNotRoot(config.User) {
+	if useNotRoot(config.Namespaces.User) {
 		configSpec.Process.Capabilities.Bounding = caplist
 	}
-	caplist, err = caps.TweakCapabilities(configSpec.Process.Capabilities.Bounding, config.CapAdd, config.CapDrop, nil, false)
+	caplist, err = caps.TweakCapabilities(configSpec.Process.Capabilities.Bounding, config.Security.CapAdd, config.Security.CapDrop, nil, false)
 	if err != nil {
 		return err
 	}
@@ -704,8 +704,8 @@ func setupCapabilities(config *CreateConfig, configSpec *spec.Spec) error {
 	configSpec.Process.Capabilities.Inheritable = caplist
 	configSpec.Process.Capabilities.Effective = caplist
 	configSpec.Process.Capabilities.Ambient = caplist
-	if useNotRoot(config.User) {
-		caplist, err = caps.TweakCapabilities(bounding, config.CapAdd, config.CapDrop, nil, false)
+	if useNotRoot(config.Namespaces.User) {
+		caplist, err = caps.TweakCapabilities(bounding, config.Security.CapAdd, config.Security.CapDrop, nil, false)
 		if err != nil {
 			return err
 		}

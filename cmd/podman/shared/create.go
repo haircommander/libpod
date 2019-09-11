@@ -26,7 +26,6 @@ import (
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/go-connections/nat"
 	"github.com/docker/go-units"
-	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -188,81 +187,6 @@ func CreateContainer(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 
 	logrus.Debugf("New container created %q", ctr.ID())
 	return ctr, createConfig, nil
-}
-
-func parseSecurityOpt(config *cc.CreateConfig, securityOpts []string, runtime *libpod.Runtime) error {
-	var (
-		labelOpts []string
-	)
-
-	if config.PidMode.IsHost() {
-		labelOpts = append(labelOpts, label.DisableSecOpt()...)
-	} else if config.PidMode.IsContainer() {
-		ctr, err := runtime.LookupContainer(config.PidMode.Container())
-		if err != nil {
-			return errors.Wrapf(err, "container %q not found", config.PidMode.Container())
-		}
-		secopts, err := label.DupSecOpt(ctr.ProcessLabel())
-		if err != nil {
-			return errors.Wrapf(err, "failed to duplicate label %q ", ctr.ProcessLabel())
-		}
-		labelOpts = append(labelOpts, secopts...)
-	}
-
-	if config.IpcMode.IsHost() {
-		labelOpts = append(labelOpts, label.DisableSecOpt()...)
-	} else if config.IpcMode.IsContainer() {
-		ctr, err := runtime.LookupContainer(config.IpcMode.Container())
-		if err != nil {
-			return errors.Wrapf(err, "container %q not found", config.IpcMode.Container())
-		}
-		secopts, err := label.DupSecOpt(ctr.ProcessLabel())
-		if err != nil {
-			return errors.Wrapf(err, "failed to duplicate label %q ", ctr.ProcessLabel())
-		}
-		labelOpts = append(labelOpts, secopts...)
-	}
-
-	for _, opt := range securityOpts {
-		if opt == "no-new-privileges" {
-			config.NoNewPrivs = true
-		} else {
-			con := strings.SplitN(opt, "=", 2)
-			if len(con) != 2 {
-				return fmt.Errorf("invalid --security-opt 1: %q", opt)
-			}
-
-			switch con[0] {
-			case "label":
-				labelOpts = append(labelOpts, con[1])
-			case "apparmor":
-				config.ApparmorProfile = con[1]
-			case "seccomp":
-				config.SeccompProfilePath = con[1]
-			default:
-				return fmt.Errorf("invalid --security-opt 2: %q", opt)
-			}
-		}
-	}
-
-	if config.SeccompProfilePath == "" {
-		if _, err := os.Stat(libpod.SeccompOverridePath); err == nil {
-			config.SeccompProfilePath = libpod.SeccompOverridePath
-		} else {
-			if !os.IsNotExist(err) {
-				return errors.Wrapf(err, "can't check if %q exists", libpod.SeccompOverridePath)
-			}
-			if _, err := os.Stat(libpod.SeccompDefaultPath); err != nil {
-				if !os.IsNotExist(err) {
-					return errors.Wrapf(err, "can't check if %q exists", libpod.SeccompDefaultPath)
-				}
-			} else {
-				config.SeccompProfilePath = libpod.SeccompDefaultPath
-			}
-		}
-	}
-	config.LabelOpts = labelOpts
-	return nil
 }
 
 func configureEntrypoint(c *GenericCLIResults, data *inspect.ImageData) []string {
@@ -699,61 +623,72 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 		pidsLimit = 0
 	}
 
+	nsConfig := &cc.NamespaceConfig{
+		Cgroupns:     c.String("cgroupns"),
+		Cgroups:      c.String("cgroups"),
+		CgroupParent: c.String("cgroup-parent"),
+		DNSOpt:       c.StringSlice("dns-opt"),
+		DNSSearch:    c.StringSlice("dns-search"),
+		DNSServers:   c.StringSlice("dns"),
+		Hostname:     c.String("hostname"),
+		HostAdd:      c.StringSlice("add-host"),
+		HTTPProxy:    c.Bool("http-proxy"),
+		GroupAdd:     c.StringSlice("group-add"),
+		NoHosts:      c.Bool("no-hosts"),
+		IDMappings:   idmappings,
+		MacAddress:   c.String("mac-address"),
+		Network:      network,
+		IpcMode:      ipcMode,
+		NetMode:      netMode,
+		UtsMode:      utsMode,
+		PidMode:      pidMode,
+		CgroupMode:   cgroupMode,
+		IPAddress:    c.String("ip"),
+		Publish:      c.StringSlice("publish"),
+		PublishAll:   c.Bool("publish-all"),
+		PortBindings: portBindings,
+		User:         user,
+		UsernsMode:   usernsMode,
+	}
+
+	secConfig, err := cc.GetSecurityConfig(nsConfig, c.StringArray("security-opt"), runtime, c.Bool("privileged"))
+	// TODO FIXME wrapf
+	if err != nil {
+		return nil, err
+	}
+	secConfig.CapAdd = c.StringSlice("cap-add")
+	secConfig.CapDrop = c.StringSlice("cap-drop")
+	secConfig.ReadOnlyRootfs = c.Bool("read-only")
+	secConfig.ReadOnlyTmpfs = c.Bool("read-only-tmpfs")
+
 	config := &cc.CreateConfig{
 		Annotations:       annotations,
 		BuiltinImgVolumes: ImageVolumes,
 		ConmonPidFile:     c.String("conmon-pidfile"),
 		ImageVolumeType:   c.String("image-volume"),
-		CapAdd:            c.StringSlice("cap-add"),
-		CapDrop:           c.StringSlice("cap-drop"),
 		CidFile:           c.String("cidfile"),
-		Cgroupns:          c.String("cgroupns"),
-		Cgroups:           c.String("cgroups"),
-		CgroupParent:      c.String("cgroup-parent"),
 		Command:           command,
 		UserCommand:       userCommand,
 		Detach:            c.Bool("detach"),
 		Devices:           c.StringSlice("device"),
-		DNSOpt:            c.StringSlice("dns-opt"),
-		DNSSearch:         c.StringSlice("dns-search"),
-		DNSServers:        c.StringSlice("dns"),
 		Entrypoint:        entrypoint,
 		Env:               env,
 		// ExposedPorts:   ports,
-		GroupAdd:    c.StringSlice("group-add"),
-		Hostname:    c.String("hostname"),
-		HostAdd:     c.StringSlice("add-host"),
-		HTTPProxy:   c.Bool("http-proxy"),
-		NoHosts:     c.Bool("no-hosts"),
-		IDMappings:  idmappings,
 		Init:        c.Bool("init"),
 		InitPath:    c.String("init-path"),
 		Image:       imageName,
 		ImageID:     imageID,
 		Interactive: c.Bool("interactive"),
 		// IP6Address:     c.String("ipv6"), // Not implemented yet - needs CNI support for static v6
-		IPAddress: c.String("ip"),
-		Labels:    labels,
+		Labels: labels,
 		// LinkLocalIP:    c.StringSlice("link-local-ip"), // Not implemented yet
 		LogDriver:    logDriver,
 		LogDriverOpt: c.StringSlice("log-opt"),
-		MacAddress:   c.String("mac-address"),
 		Name:         c.String("name"),
-		Network:      network,
+		Namespaces:   *nsConfig, // TODO FIXME pointer?
 		// NetworkAlias:   c.StringSlice("network-alias"), // Not implemented - does this make sense in Podman?
-		IpcMode:        ipcMode,
-		NetMode:        netMode,
-		UtsMode:        utsMode,
-		PidMode:        pidMode,
-		CgroupMode:     cgroupMode,
-		Pod:            podName,
-		Privileged:     c.Bool("privileged"),
-		Publish:        c.StringSlice("publish"),
-		PublishAll:     c.Bool("publish-all"),
-		PortBindings:   portBindings,
-		Quiet:          c.Bool("quiet"),
-		ReadOnlyRootfs: c.Bool("read-only"),
-		ReadOnlyTmpfs:  c.Bool("read-only-tmpfs"),
+		Pod:   podName,
+		Quiet: c.Bool("quiet"),
 		Resources: cc.CreateResourceConfig{
 			BlkioWeight:       blkioWeight,
 			BlkioWeightDevice: c.StringSlice("blkio-weight-device"),
@@ -782,14 +717,13 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 		},
 		RestartPolicy: c.String("restart"),
 		Rm:            c.Bool("rm"),
+		Security:      *secConfig, // TODO FIXME pointer?
 		StopSignal:    stopSignal,
 		StopTimeout:   c.Uint("stop-timeout"),
 		Sysctl:        sysctl,
 		Systemd:       systemd,
 		Tmpfs:         c.StringArray("tmpfs"),
 		Tty:           tty,
-		User:          user,
-		UsernsMode:    usernsMode,
 		MountsFlag:    c.StringArray("mount"),
 		Volumes:       c.StringArray("volume"),
 		WorkDir:       workDir,
@@ -798,14 +732,6 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 		Syslog:        c.Bool("syslog"),
 	}
 
-	if config.Privileged {
-		config.LabelOpts = label.DisableSecOpt()
-	} else {
-		if err := parseSecurityOpt(config, c.StringArray("security-opt"), runtime); err != nil {
-			return nil, err
-		}
-	}
-	config.SecurityOpts = c.StringArray("security-opt")
 	warnings, err := verifyContainerResources(config, false)
 	if err != nil {
 		return nil, err
