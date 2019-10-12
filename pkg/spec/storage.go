@@ -795,7 +795,7 @@ func (config *CreateConfig) addContainerInitBinary(path string) (spec.Mount, err
 	if path == "" {
 		return mount, fmt.Errorf("please specify a path to the container-init binary")
 	}
-	if !config.Namespaces.PidMode.IsPrivate() {
+	if !config.Pid.PidMode.IsPrivate() {
 		return mount, fmt.Errorf("cannot add init binary as PID 1 (PID namespace isn't private)")
 	}
 	if config.Systemd {

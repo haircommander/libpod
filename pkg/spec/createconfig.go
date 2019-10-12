@@ -53,38 +53,54 @@ type CreateResourceConfig struct {
 	Ulimit            []string //ulimit
 }
 
-type NamespaceConfig struct {
+type PidConfig struct {
+	PidMode namespaces.PidMode //pid
+}
+
+type IpcConfig struct {
+	IpcMode namespaces.IpcMode //ipc
+}
+
+type CgroupConfig struct {
 	Cgroups      string
 	Cgroupns     string
-	CgroupParent string   // cgroup-parent
+	CgroupParent string                // cgroup-parent
+	CgroupMode   namespaces.CgroupMode //cgroup
+}
+
+type UserConfig struct {
+	GroupAdd   []string // group-add
+	IDMappings *storage.IDMappingOptions
+	UsernsMode namespaces.UsernsMode //userns
+	User       string                //user
+}
+
+type UtsConfig struct {
+	UtsMode  namespaces.UTSMode //uts
+	NoHosts  bool
+	HostAdd  []string //add-host
+	Hostname string
+}
+
+type NetworkConfig struct {
 	DNSOpt       []string //dns-opt
 	DNSSearch    []string //dns-search
 	DNSServers   []string //dns
 	ExposedPorts map[nat.Port]struct{}
-	NoHosts      bool
-	HostAdd      []string //add-host
-	Hostname     string   //hostname
 	HTTPProxy    bool
-	IDMappings   *storage.IDMappingOptions
-	IpcMode      namespaces.IpcMode     //ipc
 	IP6Address   string                 //ipv6
 	IPAddress    string                 //ip
-	GroupAdd     []string               // group-add
 	LinkLocalIP  []string               // link-local-ip
 	MacAddress   string                 //mac-address
 	NetMode      namespaces.NetworkMode //net
 	Network      string                 //network
 	NetworkAlias []string               //network-alias
-	PidMode      namespaces.PidMode     //pid
 	PortBindings nat.PortMap
-	Publish      []string              //publish
-	PublishAll   bool                  //publish-all
-	CgroupMode   namespaces.CgroupMode //cgroup
-	UsernsMode   namespaces.UsernsMode //userns
-	User         string                //user
-	UtsMode      namespaces.UTSMode    //uts
+	Publish      []string //publish
+	PublishAll   bool     //publish-all
 }
 
+// SecurityConfig TODO FIXME
 type SecurityConfig struct {
 	CapAdd             []string // cap-add
 	CapDrop            []string // cap-drop
@@ -93,9 +109,10 @@ type SecurityConfig struct {
 	ApparmorProfile    string   //SecurityOpts
 	SeccompProfilePath string   //SecurityOpts
 	SecurityOpts       []string
-	Privileged         bool //privileged
-	ReadOnlyRootfs     bool //read-only
-	ReadOnlyTmpfs      bool //read-only-tmpfs
+	Privileged         bool              //privileged
+	ReadOnlyRootfs     bool              //read-only
+	ReadOnlyTmpfs      bool              //read-only-tmpfs
+	Sysctl             map[string]string //sysctl
 }
 
 // CreateConfig is a pre OCI spec structure.  It represents user input from varlink or the CLI
@@ -122,16 +139,14 @@ type CreateConfig struct {
 	LogDriver         string              // log-driver
 	LogDriverOpt      []string            // log-opt
 	Name              string              //name
-	Namespaces        NamespaceConfig
 	PodmanPath        string
 	Pod               string //pod
 	Quiet             bool   //quiet
 	Resources         CreateResourceConfig
 	RestartPolicy     string
-	Rm                bool              //rm
-	StopSignal        syscall.Signal    // stop-signal
-	StopTimeout       uint              // stop-timeout
-	Sysctl            map[string]string //sysctl
+	Rm                bool           //rm
+	StopSignal        syscall.Signal // stop-signal
+	StopTimeout       uint           // stop-timeout
 	Systemd           bool
 	Tmpfs             []string // tmpfs
 	Tty               bool     //tty
@@ -144,6 +159,14 @@ type CreateConfig struct {
 	Rootfs            string
 	Security          SecurityConfig
 	Syslog            bool // Whether to enable syslog on exit commands
+
+	// Namespaces
+	Pid     PidConfig
+	Ipc     IpcConfig
+	Cgroup  CgroupConfig
+	User    UserConfig
+	Uts     UtsConfig
+	Network NetworkConfig
 }
 
 func u32Ptr(i int64) *uint32     { u := uint32(i); return &u }
@@ -262,30 +285,53 @@ func (c *CreateConfig) getContainerCreateOptions(runtime *libpod.Runtime, pod *l
 		options = append(options, libpod.WithLogDriver(c.LogDriver))
 	}
 
-	secOpts, err := c.Security.configureSecurity()
-	// TODO FIXME wrapf
+	secOpts, err := c.Security.ToCreateOptions()
 	if err != nil {
 		return nil, err
 	}
 	options = append(options, secOpts...)
 
+	nsOpts, err := c.Cgroup.ToCreateOptions(runtime)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, nsOpts...)
+
+	nsOpts, err = c.Ipc.ToCreateOptions(runtime)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, nsOpts...)
+
+	nsOpts, err = c.Pid.ToCreateOptions(runtime)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, nsOpts...)
+
+	nsOpts, err = c.Network.ToCreateOptions(runtime, &c.User)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, nsOpts...)
+
+	nsOpts, err = c.Uts.ToCreateOptions(runtime, pod)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, nsOpts...)
+
+	nsOpts, err = c.User.ToCreateOptions(runtime)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, nsOpts...)
+
 	useImageVolumes := c.ImageVolumeType == TypeBind
 	// Gather up the options for NewContainer which consist of With... funcs
 	options = append(options, libpod.WithRootFSFromImage(c.ImageID, c.Image, useImageVolumes))
-	options = append(options, libpod.WithSecLabels(c.Security.LabelOpts))
 	options = append(options, libpod.WithConmonPidFile(c.ConmonPidFile))
 	options = append(options, libpod.WithLabels(c.Labels))
-	// TODO FIXME maybe add this to namespaces?
-	if c.Namespaces.IpcMode.IsHost() {
-		options = append(options, libpod.WithShmDir("/dev/shm"))
-
-	} else if c.Namespaces.IpcMode.IsContainer() {
-		ctr, err := runtime.LookupContainer(c.Namespaces.IpcMode.Container())
-		if err != nil {
-			return nil, errors.Wrapf(err, "container %q not found", c.Namespaces.IpcMode.Container())
-		}
-		options = append(options, libpod.WithShmDir(ctr.ShmDir()))
-	}
 	options = append(options, libpod.WithShmSize(c.Resources.ShmSize))
 	if c.Rootfs != "" {
 		options = append(options, libpod.WithRootFS(c.Rootfs))

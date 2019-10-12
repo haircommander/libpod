@@ -623,35 +623,51 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 		pidsLimit = 0
 	}
 
-	nsConfig := &cc.NamespaceConfig{
-		Cgroupns:     c.String("cgroupns"),
+	pid := cc.PidConfig{
+		PidMode: pidMode,
+	}
+	ipc := cc.IpcConfig{
+		IpcMode: ipcMode,
+	}
+
+	cgroup := cc.CgroupConfig{
 		Cgroups:      c.String("cgroups"),
+		Cgroupns:     c.String("cgroupns"),
 		CgroupParent: c.String("cgroup-parent"),
+		CgroupMode:   cgroupMode,
+	}
+
+	// TODO FIXME naming convention diff
+	userns := cc.UserConfig{
+		GroupAdd:   c.StringSlice("group-add"),
+		IDMappings: idmappings,
+		UsernsMode: usernsMode,
+		User:       user,
+	}
+
+	uts := cc.UtsConfig{
+		UtsMode:  utsMode,
+		NoHosts:  c.Bool("no-hosts"),
+		HostAdd:  c.StringSlice("add-host"),
+		Hostname: c.String("hostname"),
+	}
+
+	net := cc.NetworkConfig{
 		DNSOpt:       c.StringSlice("dns-opt"),
 		DNSSearch:    c.StringSlice("dns-search"),
 		DNSServers:   c.StringSlice("dns"),
-		Hostname:     c.String("hostname"),
-		HostAdd:      c.StringSlice("add-host"),
 		HTTPProxy:    c.Bool("http-proxy"),
-		GroupAdd:     c.StringSlice("group-add"),
-		NoHosts:      c.Bool("no-hosts"),
-		IDMappings:   idmappings,
 		MacAddress:   c.String("mac-address"),
 		Network:      network,
-		IpcMode:      ipcMode,
 		NetMode:      netMode,
-		UtsMode:      utsMode,
-		PidMode:      pidMode,
-		CgroupMode:   cgroupMode,
 		IPAddress:    c.String("ip"),
 		Publish:      c.StringSlice("publish"),
 		PublishAll:   c.Bool("publish-all"),
 		PortBindings: portBindings,
-		User:         user,
-		UsernsMode:   usernsMode,
 	}
 
-	secConfig, err := cc.GetSecurityConfig(nsConfig, c.StringArray("security-opt"), runtime, c.Bool("privileged"))
+	// TODO FIXME make this better
+	secConfig, err := cc.GetSecurityConfig(&pid, &ipc, c.StringArray("security-opt"), runtime, c.Bool("privileged"))
 	// TODO FIXME wrapf
 	if err != nil {
 		return nil, err
@@ -660,6 +676,7 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 	secConfig.CapDrop = c.StringSlice("cap-drop")
 	secConfig.ReadOnlyRootfs = c.Bool("read-only")
 	secConfig.ReadOnlyTmpfs = c.Bool("read-only-tmpfs")
+	secConfig.Sysctl = sysctl
 
 	config := &cc.CreateConfig{
 		Annotations:       annotations,
@@ -685,7 +702,6 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 		LogDriver:    logDriver,
 		LogDriverOpt: c.StringSlice("log-opt"),
 		Name:         c.String("name"),
-		Namespaces:   *nsConfig, // TODO FIXME pointer?
 		// NetworkAlias:   c.StringSlice("network-alias"), // Not implemented - does this make sense in Podman?
 		Pod:   podName,
 		Quiet: c.Bool("quiet"),
@@ -720,7 +736,6 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 		Security:      *secConfig, // TODO FIXME pointer?
 		StopSignal:    stopSignal,
 		StopTimeout:   c.Uint("stop-timeout"),
-		Sysctl:        sysctl,
 		Systemd:       systemd,
 		Tmpfs:         c.StringArray("tmpfs"),
 		Tty:           tty,
@@ -730,6 +745,13 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 		Rootfs:        rootfs,
 		VolumesFrom:   c.StringSlice("volumes-from"),
 		Syslog:        c.Bool("syslog"),
+
+		Pid:     pid,
+		Ipc:     ipc,
+		Cgroup:  cgroup,
+		User:    userns,
+		Uts:     uts,
+		Network: net,
 	}
 
 	warnings, err := verifyContainerResources(config, false)

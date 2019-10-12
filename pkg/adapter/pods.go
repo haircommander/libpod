@@ -670,8 +670,14 @@ func getPodPorts(containers []v1.Container) []ocicni.PortMapping {
 func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container, runtime *libpod.Runtime, newImage *image.Image, namespaces map[string]string, volumes map[string]string, podID string) (*createconfig.CreateConfig, error) {
 	var (
 		containerConfig createconfig.CreateConfig
-		namespaceConfig createconfig.NamespaceConfig
-		securityConfig  createconfig.SecurityConfig
+		// TODO FIXME instead of manually setting, we should use the build in ToOptions()
+		pidConfig      createconfig.PidConfig
+		networkConfig  createconfig.NetworkConfig
+		cgroupConfig   createconfig.CgroupConfig
+		utsConfig      createconfig.UtsConfig
+		ipcConfig      createconfig.IpcConfig
+		userConfig     createconfig.UserConfig
+		securityConfig createconfig.SecurityConfig
 	)
 
 	// The default for MemorySwappiness is -1, not 0
@@ -687,9 +693,9 @@ func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container
 
 	imageData, _ := newImage.Inspect(ctx)
 
-	namespaceConfig.User = "0"
+	userConfig.User = "0"
 	if imageData != nil {
-		namespaceConfig.User = imageData.Config.User
+		userConfig.User = imageData.Config.User
 	}
 
 	if containerYAML.SecurityContext != nil {
@@ -731,20 +737,26 @@ func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container
 	containerConfig.StopSignal = 15
 
 	// If the user does not pass in ID mappings, just set to basics
-	if namespaceConfig.IDMappings == nil {
-		namespaceConfig.IDMappings = &storage.IDMappingOptions{}
+	if userConfig.IDMappings == nil {
+		userConfig.IDMappings = &storage.IDMappingOptions{}
 	}
 
-	namespaceConfig.NetMode = ns.NetworkMode(namespaces["net"])
-	namespaceConfig.IpcMode = ns.IpcMode(namespaces["ipc"])
-	namespaceConfig.UtsMode = ns.UTSMode(namespaces["uts"])
+	networkConfig.NetMode = ns.NetworkMode(namespaces["net"])
+	ipcConfig.IpcMode = ns.IpcMode(namespaces["ipc"])
+	utsConfig.UtsMode = ns.UTSMode(namespaces["uts"])
 	// disabled in code review per mheon
 	//containerConfig.PidMode = ns.PidMode(namespaces["pid"])
-	namespaceConfig.UsernsMode = ns.UsernsMode(namespaces["user"])
+	userConfig.UsernsMode = ns.UsernsMode(namespaces["user"])
 	if len(containerConfig.WorkDir) == 0 {
 		containerConfig.WorkDir = "/"
 	}
-	containerConfig.Namespaces = namespaceConfig
+	containerConfig.Pid = pidConfig
+	containerConfig.Network = networkConfig
+	containerConfig.Uts = utsConfig
+	containerConfig.Ipc = ipcConfig
+	containerConfig.Cgroup = cgroupConfig
+	containerConfig.User = userConfig
+
 	containerConfig.Security = securityConfig
 
 	// Set default environment variables and incorporate data from image, if necessary
