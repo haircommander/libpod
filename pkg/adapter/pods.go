@@ -26,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	v12 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -600,7 +601,7 @@ func (r *LocalRuntime) PlayKubeYAML(ctx context.Context, c *cliconfig.KubePlayVa
 		if err != nil {
 			return nil, err
 		}
-		createConfig, err := kubeContainerToCreateConfig(ctx, container, r.Runtime, newImage, namespaces, volumes, pod.ID())
+		createConfig, err := kubeContainerToCreateConfig(ctx, container, r.Runtime, newImage, namespaces, volumes, pod.ID(), podYAML)
 		if err != nil {
 			return nil, err
 		}
@@ -719,7 +720,7 @@ func setupSecurityContext(securityConfig *createconfig.SecurityConfig, userConfi
 }
 
 // kubeContainerToCreateConfig takes a v1.Container and returns a createconfig describing a container
-func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container, runtime *libpod.Runtime, newImage *image.Image, namespaces map[string]string, volumes map[string]string, podID string) (*createconfig.CreateConfig, error) {
+func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container, runtime *libpod.Runtime, newImage *image.Image, namespaces map[string]string, volumes map[string]string, podID string, podYAML v1.Pod) (*createconfig.CreateConfig, error) {
 	var (
 		containerConfig createconfig.CreateConfig
 		pidConfig       createconfig.PidConfig
@@ -751,8 +752,9 @@ func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container
 
 	setupSecurityContext(&securityConfig, &userConfig, containerYAML)
 
+	// configure Seccomp
 	var err error
-	containerConfig.Security.SeccompProfilePath, err = libpod.DefaultSeccompPath()
+	containerConfig.Security.SeccompProfilePath, err = configureContainerSeccomp(podYAML.ObjectMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -817,4 +819,32 @@ func kubeContainerToCreateConfig(ctx context.Context, containerYAML v1.Container
 		containerConfig.Volumes = append(containerConfig.Volumes, fmt.Sprintf("%s:%s", hostPath, volume.MountPath))
 	}
 	return &containerConfig, nil
+}
+
+// configureContainerSeccomp takes the pod metadata and parses the seccomp profile that should be used
+// the available options are parsed as defined in https://kubernetes.io/docs/concepts/policy/pod-security-policy/#seccomp
+// if seccomp is defined in the annotations, but is not of the expected format, the value found is returned
+func configureContainerSeccomp(meta v12.ObjectMeta) (string, error) {
+	annotations := meta.Annotations
+	if annotations != nil {
+		seccomp, ok := annotations[v1.SeccompContainerAnnotationKeyPrefix]
+		if !ok {
+			return libpod.DefaultSeccompPath()
+		}
+		switch seccomp {
+		case v1.DeprecatedSeccompProfileDockerDefault:
+			fallthrough
+		case v1.SeccompProfileRuntimeDefault:
+			return libpod.DefaultSeccompPath()
+		case "unconfined":
+			return seccomp, nil
+		default:
+			parts := strings.Split(seccomp, "/")
+			if parts[0] == "localhost" {
+				return parts[1], nil
+			}
+			return seccomp, nil
+		}
+	}
+	return libpod.DefaultSeccompPath()
 }
