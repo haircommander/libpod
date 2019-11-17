@@ -11,6 +11,7 @@ import (
 	"github.com/containers/libpod/cmd/podman/varlink"
 	"github.com/containers/libpod/libpod"
 	"github.com/containers/libpod/pkg/adapter/shortcuts"
+	"github.com/opencontainers/runtime-tools/generate"
 )
 
 // CreatePod ...
@@ -53,7 +54,13 @@ func (i *LibpodAPI) CreatePod(call iopodman.VarlinkCall, create iopodman.PodCrea
 	}
 	options = append(options, libpod.WithPodCgroups())
 
-	pod, err := i.Runtime.NewPod(getContext(), options...)
+	// Set up generator for infra container defaults
+	g, err := generate.New("linux")
+	if err != nil {
+		return err
+	}
+
+	pod, err := i.Runtime.NewPod(getContext(), g, make([]libpod.CtrCreateOption, 0), options...)
 	if err != nil {
 		return call.ReplyErrorOccurred(err.Error())
 	}

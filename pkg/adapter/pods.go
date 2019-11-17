@@ -23,6 +23,7 @@ import (
 	"github.com/containers/storage"
 	"github.com/cri-o/ocicni/pkg/ocicni"
 	"github.com/ghodss/yaml"
+	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -282,7 +283,13 @@ func (r *LocalRuntime) CreatePod(ctx context.Context, cli *cliconfig.PodCreateVa
 	// User Opt out is not yet supported
 	options = append(options, libpod.WithPodCgroups())
 
-	pod, err := r.NewPod(ctx, options...)
+	// Set up generator for infra container defaults
+	g, err := generate.New("linux")
+	if err != nil {
+		return "", err
+	}
+
+	pod, err := r.NewPod(ctx, g, make([]libpod.CtrCreateOption, 0), options...)
 	if err != nil {
 		return "", err
 	}
@@ -502,8 +509,13 @@ func (r *LocalRuntime) PlayKubeYAML(ctx context.Context, c *cliconfig.KubePlayVa
 	podPorts := getPodPorts(podYAML.Spec.Containers)
 	podOptions = append(podOptions, libpod.WithInfraContainerPorts(podPorts))
 
-	// Create the Pod
-	pod, err = r.NewPod(ctx, podOptions...)
+	// Set up generator for infra container defaults
+	g, err := generate.New("linux")
+	if err != nil {
+		return nil, err
+	}
+
+	pod, err = r.NewPod(ctx, g, make([]libpod.CtrCreateOption, 0), podOptions...)
 	if err != nil {
 		return nil, err
 	}

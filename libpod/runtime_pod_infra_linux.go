@@ -10,7 +10,6 @@ import (
 	"github.com/containers/libpod/libpod/image"
 	"github.com/containers/libpod/pkg/rootless"
 	"github.com/containers/libpod/pkg/util"
-	"github.com/opencontainers/image-spec/specs-go/v1"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/pkg/errors"
@@ -23,13 +22,26 @@ const (
 	IDTruncLength = 12
 )
 
-func (r *Runtime) makeInfraContainer(ctx context.Context, p *Pod, imgName, imgID string, config *v1.ImageConfig) (*Container, error) {
+// createInfraContainer creates an infra container for a pod.
+// An infra container becomes the basis for kernel namespace sharing between
+// containers in the pod.
+func (r *Runtime) createInfraContainer(ctx context.Context, p *Pod, g generate.Generator, options ...CtrCreateOption) (*Container, error) {
+	if !r.valid {
+		return nil, define.ErrRuntimeStopped
+	}
 
-	// Set up generator for infra container defaults
-	g, err := generate.New("linux")
+	newImage, err := r.ImageRuntime().New(ctx, r.config.InfraImage, "", "", nil, nil, image.SigningOptions{}, nil, util.PullImageMissing)
 	if err != nil {
 		return nil, err
 	}
+
+	data, err := newImage.Inspect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	imgName := newImage.Names()[0]
+	imgID := data.ID
+	config := data.Config
 
 	// Set Pod hostname
 	g.Config.Hostname = p.config.Hostname
@@ -87,7 +99,6 @@ func (r *Runtime) makeInfraContainer(ctx context.Context, p *Pod, imgName, imgID
 	}
 
 	containerName := p.ID()[:IDTruncLength] + "-infra"
-	var options []CtrCreateOption
 	options = append(options, r.WithPod(p))
 	options = append(options, WithRootFSFromImage(imgID, imgName, false))
 	options = append(options, WithName(containerName))
@@ -104,27 +115,4 @@ func (r *Runtime) makeInfraContainer(ctx context.Context, p *Pod, imgName, imgID
 	options = append(options, WithNetNS(p.config.InfraContainer.PortBindings, false, netmode, networks))
 
 	return r.newContainer(ctx, g.Config, options...)
-}
-
-// createInfraContainer wrap creates an infra container for a pod.
-// An infra container becomes the basis for kernel namespace sharing between
-// containers in the pod.
-func (r *Runtime) createInfraContainer(ctx context.Context, p *Pod) (*Container, error) {
-	if !r.valid {
-		return nil, define.ErrRuntimeStopped
-	}
-
-	newImage, err := r.ImageRuntime().New(ctx, r.config.InfraImage, "", "", nil, nil, image.SigningOptions{}, nil, util.PullImageMissing)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := newImage.Inspect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	imageName := newImage.Names()[0]
-	imageID := data.ID
-
-	return r.makeInfraContainer(ctx, p, imageName, imageID, data.Config)
 }

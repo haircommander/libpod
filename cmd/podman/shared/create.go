@@ -26,6 +26,7 @@ import (
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/go-connections/nat"
 	"github.com/docker/go-units"
+	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -378,7 +379,14 @@ func ParseCreateOpts(ctx context.Context, c *GenericCLIResults, runtime *libpod.
 			}
 			podOptions = append(podOptions, podNsOptions...)
 			// make pod
-			pod, err := runtime.NewPod(ctx, podOptions...)
+
+			// Set up generator for infra container defaults
+			g, err := generate.New("linux")
+			if err != nil {
+				return nil, err
+			}
+
+			pod, err := runtime.NewPod(ctx, g, make([]libpod.CtrCreateOption, 0), podOptions...)
 			if err != nil {
 				return nil, err
 			}

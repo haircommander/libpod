@@ -14,12 +14,13 @@ import (
 	"github.com/containers/libpod/pkg/cgroups"
 	"github.com/containers/libpod/pkg/rootless"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 // NewPod makes a new, empty pod
-func (r *Runtime) NewPod(ctx context.Context, options ...PodCreateOption) (_ *Pod, Err error) {
+func (r *Runtime) NewPod(ctx context.Context, infraGenerator generate.Generator, infraOptions []CtrCreateOption, options ...PodCreateOption) (_ *Pod, Err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -134,7 +135,7 @@ func (r *Runtime) NewPod(ctx context.Context, options ...PodCreateOption) (_ *Po
 	}()
 
 	if pod.HasInfraContainer() {
-		ctr, err := r.createInfraContainer(ctx, pod)
+		ctr, err := r.createInfraContainer(ctx, pod, infraGenerator, infraOptions...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error adding Infra Container")
 		}
