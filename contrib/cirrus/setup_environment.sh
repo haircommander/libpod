@@ -53,10 +53,10 @@ case "${OS_RELEASE_ID}" in
             bash "$SCRIPT_BASE/add_second_partition.sh"
         fi
 
-        warn "Switching io scheduler to 'deadline' to avoid RHBZ 1767539"
-        warn "aka https://bugzilla.kernel.org/show_bug.cgi?id=205447"
-        echo "mq-deadline" > /sys/block/sda/queue/scheduler
-        cat /sys/block/sda/queue/scheduler
+        # warn "Switching io scheduler to 'deadline' to avoid RHBZ 1767539"
+        # warn "aka https://bugzilla.kernel.org/show_bug.cgi?id=205447"
+        # echo "mq-deadline" > /sys/block/sda/queue/scheduler
+        # cat /sys/block/sda/queue/scheduler
 
         warn "Forcing systemd cgroup manager"
         X=$(echo "export CGROUP_MANAGER=systemd" | \

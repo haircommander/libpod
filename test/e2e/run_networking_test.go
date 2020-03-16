@@ -165,11 +165,11 @@ var _ = Describe("Podman run networking", func() {
 		Expect(ctr1.ExitCode()).To(Equal(0))
 
 		// Exec in and modify /etc/resolv.conf and /etc/hosts
-		exec1 := podmanTest.Podman([]string{"exec", ctrName, "sh", "-c", "echo nameserver 192.0.2.1 > /etc/resolv.conf"})
+		exec1 := podmanTest.Podman([]string{"--log-level=debug", "--syslog=true", "exec", ctrName, "sh", "-c", "echo nameserver 192.0.2.1 > /etc/resolv.conf"})
 		exec1.WaitWithDefaultTimeout()
 		Expect(exec1.ExitCode()).To(Equal(0))
 
-		exec2 := podmanTest.Podman([]string{"exec", ctrName, "sh", "-c", "echo 192.0.2.2 test1 > /etc/hosts"})
+		exec2 := podmanTest.Podman([]string{"--log-level=debug", "--syslog=true", "exec", ctrName, "sh", "-c", "echo 192.0.2.2 test1 > /etc/hosts"})
 		exec2.WaitWithDefaultTimeout()
 		Expect(exec2.ExitCode()).To(Equal(0))
 
@@ -178,12 +178,12 @@ var _ = Describe("Podman run networking", func() {
 		ctr2.WaitWithDefaultTimeout()
 		Expect(ctr2.ExitCode()).To(Equal(0))
 
-		exec3 := podmanTest.Podman([]string{"exec", "-i", ctrName2, "cat", "/etc/resolv.conf"})
+		exec3 := podmanTest.Podman([]string{"--log-level=debug", "--syslog=true", "exec", "-i", ctrName2, "cat", "/etc/resolv.conf"})
 		exec3.WaitWithDefaultTimeout()
 		Expect(exec3.ExitCode()).To(Equal(0))
 		Expect(exec3.OutputToString()).To(ContainSubstring("nameserver 192.0.2.1"))
 
-		exec4 := podmanTest.Podman([]string{"exec", "-i", ctrName2, "cat", "/etc/hosts"})
+		exec4 := podmanTest.Podman([]string{"--log-level=debug", "--syslog=true", "exec", "-i", ctrName2, "cat", "/etc/hosts"})
 		exec4.WaitWithDefaultTimeout()
 		Expect(exec4.ExitCode()).To(Equal(0))
 		Expect(exec4.OutputToString()).To(ContainSubstring("192.0.2.2 test1"))
