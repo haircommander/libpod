@@ -26,6 +26,17 @@ func InitLabel(cLabel string) (string, error) {
 	return swapSELinuxLabel(cLabel, processLabel)
 }
 
+// ROLabel returns labels for running containers read-only
+func InitLabel(cLabel string) (string, error) {
+	if cLabel == "" {
+		// selinux is disabled
+		return "", nil
+	}
+	processLabel := selinux.ROLabel()
+	selinux.ReleaseLabel(processLabel)
+	return swapSELinuxLabel(cLabel, processLabel)
+}
+
 func swapSELinuxLabel(cLabel, processLabel string) (string, error) {
 	dcon, err := selinux.NewContext(cLabel)
 	if err != nil {
